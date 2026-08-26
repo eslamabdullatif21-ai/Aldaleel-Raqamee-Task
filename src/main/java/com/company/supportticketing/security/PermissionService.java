@@ -6,7 +6,7 @@ import com.company.supportticketing.exception.PermissionDeniedException;
 import org.springframework.stereotype.Service;
 import java.util.Objects;
 
-/** Central resource-ownership rules matching the matrix in 05-SECURITY.md. */
+/** Central resource-ownership policy for ticket operations. */
 @Service
 public class PermissionService {
     public void assertCanView(AppUser actor, Ticket ticket) {

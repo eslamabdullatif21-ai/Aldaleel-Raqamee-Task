@@ -5,3 +5,6 @@ target/
 *.log
 .postgres-data/
 .postgres-review.log
+.wsl-task-docker/
+not task/
+*.pdf

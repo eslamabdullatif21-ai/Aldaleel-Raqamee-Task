@@ -5,7 +5,7 @@ import com.company.supportticketing.exception.InvalidTransitionException;
 import org.springframework.stereotype.Component;
 import java.util.*;
 
-/** Single source of truth for the transition table in 01-REQUIREMENTS.md TASK-010. */
+/** Single source of truth for the documented ticket-status transition table. */
 @Component
 public class TicketStateMachine {
     private static final Map<TicketStatus, Set<TicketStatus>> ALLOWED = Map.of(
