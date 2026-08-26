@@ -11,6 +11,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.*;
+import java.time.Instant;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,7 +27,7 @@ class TicketServiceTest {
         service = new TicketService(tickets, users, comments, history, new TicketMapper(), new TicketStateMachine(), new PermissionService());
         customer = AppUser.builder().id(UUID.randomUUID()).role(UserRole.CUSTOMER).build();
         agent = AppUser.builder().id(UUID.randomUUID()).role(UserRole.AGENT).build();
-        when(tickets.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(tickets.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
     @Test void creationAppliesDefaultsAndWritesInitialHistory() {
         var result = service.create(customer, new CreateTicketRequest("Help", "Details", TicketCategory.TECHNICAL, null));
@@ -48,5 +50,41 @@ class TicketServiceTest {
         service.updateStatus(agent, ticket.getId(), new UpdateStatusRequest(TicketStatus.IN_PROGRESS, "Starting"));
         ArgumentCaptor<StatusHistory> event = ArgumentCaptor.forClass(StatusHistory.class); verify(history).save(event.capture());
         assertEquals(TicketStatus.OPEN, event.getValue().getFromStatus()); assertEquals(TicketStatus.IN_PROGRESS, event.getValue().getToStatus());
+    }
+    @Test void commentsArePagedWithStableChronologicalOrdering() {
+        UUID ticketId = UUID.randomUUID();
+        Ticket ticket = Ticket.builder().id(ticketId).customer(customer).status(TicketStatus.OPEN).build();
+        TicketComment comment = TicketComment.builder().id(UUID.randomUUID()).ticket(ticket).author(customer)
+                .body("Update").createdAt(Instant.now()).build();
+        when(tickets.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(comments.findByTicketId(eq(ticketId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(comment), PageRequest.of(1, 100), 101));
+
+        Page<?> result = service.comments(customer, ticketId, PageRequest.of(1, 500, Sort.by("body")));
+
+        assertEquals(1, result.getNumber());
+        assertEquals(101, result.getTotalElements());
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(comments).findByTicketId(eq(ticketId), pageable.capture());
+        assertEquals(100, pageable.getValue().getPageSize());
+        assertEquals(Sort.Direction.ASC, pageable.getValue().getSort().getOrderFor("createdAt").getDirection());
+        assertEquals(Sort.Direction.ASC, pageable.getValue().getSort().getOrderFor("id").getDirection());
+    }
+    @Test void historyIsPagedWithStableChronologicalOrdering() {
+        UUID ticketId = UUID.randomUUID();
+        Ticket ticket = Ticket.builder().id(ticketId).customer(customer).status(TicketStatus.OPEN).build();
+        StatusHistory event = StatusHistory.builder().id(UUID.randomUUID()).ticket(ticket).changedBy(customer)
+                .eventType(HistoryEventType.STATUS_CHANGE).toStatus(TicketStatus.OPEN).changedAt(Instant.now()).build();
+        when(tickets.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(history.findByTicketId(eq(ticketId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(event), PageRequest.of(0, 20), 1));
+
+        Page<?> result = service.history(customer, ticketId, PageRequest.of(0, 20));
+
+        assertEquals(1, result.getTotalElements());
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(history).findByTicketId(eq(ticketId), pageable.capture());
+        assertEquals(Sort.Direction.ASC, pageable.getValue().getSort().getOrderFor("changedAt").getDirection());
+        assertEquals(Sort.Direction.ASC, pageable.getValue().getSort().getOrderFor("id").getDirection());
     }
 }

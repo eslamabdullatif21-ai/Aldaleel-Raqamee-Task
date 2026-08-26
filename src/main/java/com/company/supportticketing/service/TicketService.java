@@ -19,6 +19,8 @@ import java.util.*;
 
 @Service @RequiredArgsConstructor
 public class TicketService {
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final TicketRepository tickets;
     private final UserRepository users;
     private final CommentRepository comments;
@@ -47,7 +49,7 @@ public class TicketService {
     public Page<TicketResponse> list(AppUser actor, TicketStatus status, TicketPriority priority,
                                      TicketCategory category, Pageable pageable) {
         Specification<Ticket> spec = scopedTo(actor).and(filter(status, priority, category));
-        return tickets.findAll(spec, pageable).map(mapper::toResponse);
+        return tickets.findAll(spec, cappedPage(pageable)).map(mapper::toResponse);
     }
 
     @Transactional
@@ -88,15 +90,15 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public List<CommentResponse> comments(AppUser actor, UUID id) {
+    public Page<CommentResponse> comments(AppUser actor, UUID id, Pageable pageable) {
         Ticket ticket = requireTicket(id); permissions.assertCanComment(actor, ticket);
-        return comments.findByTicketIdOrderByCreatedAtAsc(id).stream().map(mapper::toResponse).toList();
+        return comments.findByTicketId(id, chronologicalPage(pageable, "createdAt")).map(mapper::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public List<HistoryResponse> history(AppUser actor, UUID id) {
+    public Page<HistoryResponse> history(AppUser actor, UUID id, Pageable pageable) {
         Ticket ticket = requireTicket(id); permissions.assertCanViewHistory(actor, ticket);
-        return history.findByTicketIdOrderByChangedAtAsc(id).stream().map(mapper::toResponse).toList();
+        return history.findByTicketId(id, chronologicalPage(pageable, "changedAt")).map(mapper::toResponse);
     }
 
     private Ticket requireTicket(UUID id) { return tickets.findById(id).orElseThrow(() -> new TicketNotFoundException(id)); }
@@ -115,5 +117,14 @@ public class TicketService {
             if (category != null) predicates.add(cb.equal(root.get("category"), category));
             return cb.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    private Pageable chronologicalPage(Pageable pageable, String timestampProperty) {
+        return PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), MAX_PAGE_SIZE),
+                Sort.by(Sort.Order.asc(timestampProperty), Sort.Order.asc("id")));
+    }
+
+    private Pageable cappedPage(Pageable pageable) {
+        return PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), MAX_PAGE_SIZE), pageable.getSort());
     }
 }

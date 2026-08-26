@@ -34,5 +34,9 @@ public class TicketController {
     public TicketResponse status(@AuthenticationPrincipal AppUser actor, @PathVariable UUID id, @Valid @RequestBody UpdateStatusRequest request) { return service.updateStatus(actor, id, request); }
     @PatchMapping("/{id}/priority") @PreAuthorize("hasRole('AGENT')")
     public TicketResponse priority(@AuthenticationPrincipal AppUser actor, @PathVariable UUID id, @Valid @RequestBody UpdatePriorityRequest request) { return service.updatePriority(actor, id, request); }
-    @GetMapping("/{id}/history") public List<HistoryResponse> history(@AuthenticationPrincipal AppUser actor, @PathVariable UUID id) { return service.history(actor, id); }
+    @GetMapping("/{id}/history")
+    public Page<HistoryResponse> history(@AuthenticationPrincipal AppUser actor, @PathVariable UUID id,
+            @PageableDefault(size=20, sort="changedAt", direction=Sort.Direction.ASC) Pageable pageable) {
+        return service.history(actor, id, pageable);
+    }
 }

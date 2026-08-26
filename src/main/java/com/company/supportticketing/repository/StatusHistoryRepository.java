@@ -1,9 +1,11 @@
 package com.company.supportticketing.repository;
 
 import com.company.supportticketing.domain.entity.StatusHistory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import java.util.*;
+import java.util.UUID;
 
 public interface StatusHistoryRepository extends JpaRepository<StatusHistory, UUID> {
-    List<StatusHistory> findByTicketIdOrderByChangedAtAsc(UUID ticketId);
+    Page<StatusHistory> findByTicketId(UUID ticketId, Pageable pageable);
 }
