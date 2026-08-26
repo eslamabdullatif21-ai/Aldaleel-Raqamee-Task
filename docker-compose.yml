@@ -25,6 +25,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-app_local_password}
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-before-production-1234567890}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      LOGIN_RATE_LIMIT_MAX_ATTEMPTS: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:-10}
+      LOGIN_RATE_LIMIT_WINDOW: ${LOGIN_RATE_LIMIT_WINDOW:-PT1M}
     ports:
       - "8080:8080"
 volumes:

@@ -58,10 +58,19 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(BadCredentialsException.class)
     ResponseEntity<ApiErrorResponse> unauthorized(Exception ex, HttpServletRequest request) { return error(HttpStatus.UNAUTHORIZED, "Invalid email or password", request, null); }
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ApiErrorResponse> rateLimited(RateLimitExceededException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(response(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request, null));
+    }
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiErrorResponse> unexpected(Exception ex, HttpServletRequest request) { return error(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", request, null); }
     private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String message, HttpServletRequest request, java.util.List<FieldErrorResponse> fields) {
-        return ResponseEntity.status(status).body(new ApiErrorResponse(Instant.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI(), fields));
+        return ResponseEntity.status(status).body(response(status, message, request, fields));
+    }
+    private ApiErrorResponse response(HttpStatus status, String message, HttpServletRequest request, java.util.List<FieldErrorResponse> fields) {
+        return new ApiErrorResponse(Instant.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI(), fields);
     }
     private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
         Throwable current = throwable;
