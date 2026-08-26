@@ -11,4 +11,4 @@ Audit date: 2026-08-25. Status legend: PASS, FIXED, LIMITATION.
 | Fetch strategy | PASS | Every `ManyToOne` association explicitly uses `LAZY`. | None. |
 | Payload size | PASS | Ticket responses do not embed comments/history or user entities. | Separate endpoints keep payloads bounded by use case. |
 | Transaction scope | PASS | Transactions contain database/policy/mapping work only; there are no external calls. | Read methods use `readOnly=true`. |
-| Runtime measurements | LIMITATION | Docker is unavailable on the verification host, so cold-start and live PostgreSQL latency were not measured. | Compose and Dockerfile were statically reviewed; run measurements in CI/host with Docker. |
+| Runtime measurements | LIMITATION | The application, Flyway, seed flow, dump, and restore were verified on local PostgreSQL 16.9, but Docker cold-start and systematic latency measurements were not captured. | Compose and Dockerfile were statically reviewed; capture container timings in CI/host with Docker. |

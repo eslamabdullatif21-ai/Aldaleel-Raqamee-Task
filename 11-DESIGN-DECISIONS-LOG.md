@@ -54,7 +54,7 @@
 
 **Decision**: provide H2 PostgreSQL mode for lightweight contexts and use Mockito unit tests for business rules.
 
-**Rationale / trade-off**: tests stay deterministic without infrastructure; PostgreSQL-specific runtime behavior needs Docker/CI verification.
+**Rationale / trade-off**: tests stay deterministic without infrastructure. PostgreSQL-specific migration, seeding, dump, and restore were verified separately on PostgreSQL 16.9; CI should automate the same check with Testcontainers.
 
 ## Exact enum vocabulary
 

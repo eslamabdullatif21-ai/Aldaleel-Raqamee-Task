@@ -39,13 +39,20 @@ PowerShell uses `$env:VARIABLE_NAME='value'` instead of `export`.
 
 ## Restoring the Database Backup
 
-A PostgreSQL schema backup is included at `db/backup.sql`. Flyway is the normal source of truth; the backup is the assessment artifact.
+A PostgreSQL 16.9 schema-and-data dump generated with `pg_dump` is included at `db/backup.sql`. It contains the Flyway schema history and demo data; see `db/BACKUP-MANIFEST.md` for verified counts and checksum.
 
 ```bash
-docker exec -i support-ticketing-postgres-1 psql -U app -d support_ticketing < db/backup.sql
+docker compose exec -T postgres psql -U app -d support_ticketing < db/backup.sql
 ```
 
-No credentials are seeded. Register one `CUSTOMER` and one `AGENT` through `/api/auth/register`.
+Demo accounts included in the dump:
+
+| Role | Email | Password |
+|---|---|---|
+| Customer | `customer@example.com` | `Customer123!` |
+| Agent | `agent@example.com` | `Agent123!` |
+
+The dump contains 2 users, 2 tickets, 3 comments, and 7 history events. `db/seed-demo.ps1` reproduces the dataset through the public API on a fresh database.
 
 ## Running Tests
 
@@ -156,4 +163,4 @@ stateDiagram-v2
 
 ## Incomplete / Deviated Requirements
 
-All feature tasks TASK-001 through TASK-012 are implemented. Docker is not installed in the build environment, so the Compose stack and PostgreSQL restore could not be executed locally; their definitions were statically cross-checked. The installed JDK was Java 17, so the passing build was additionally run with a temporary `-Djava.version=17` verification override while the committed project and Docker image remain correctly targeted to Java 21.
+All feature tasks TASK-001 through TASK-012 are implemented. PostgreSQL 16.9 was run locally: Flyway migrated an empty database, demo data was created through the API, `pg_dump` generated the backup, and that dump was restored into a second database where counts, Flyway validation, authentication, ticket listing, comments, and history were verified. Docker is not installed, so the Compose stack itself could only be statically checked. The installed JDK was Java 17, so the passing build used a temporary `-Djava.version=17` verification override while the committed project and Docker image remain targeted to Java 21.

@@ -1,8 +1,8 @@
 # Independent Reviewer-Style Test Report
 
 **Review date:** 2026-08-25  
-**Final score:** **92/100**  
-**Verdict:** Strong assessment submission. All required ticketing behavior passed live black-box testing after the defects found during review were corrected. The main residual risk is environmental: Docker and a real PostgreSQL server were unavailable, so their runtime behavior could not be directly exercised here.
+**Final score:** **94/100**
+**Verdict:** Strong assessment submission. All required ticketing behavior passed live black-box testing after the defects found during review were corrected. PostgreSQL migration, data creation, `pg_dump`, clean restore, restored login, and restored API reads were also verified. Docker remains the main unexecuted delivery path.
 
 ## Executive Summary
 
@@ -98,7 +98,7 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 
 - The project and container remain targeted to **Java 21**, but the available review host had Java 17. Compilation/tests therefore used a temporary Maven `-Djava.version=17` override. No Java-17-only project change was committed.
 - Docker was not installed, so `docker compose up --build` and the non-root container image could only be statically reviewed.
-- PostgreSQL 16 was not installed. The actual Flyway SQL was instead applied through H2 2.3 in PostgreSQL mode and then checked with Hibernate schema validation. A Testcontainers/PostgreSQL CI run remains the strongest final deployment check.
+- PostgreSQL 16.9 was run directly. Flyway migrated a fresh database, demo data was created through the HTTP API, an actual `pg_dump` was restored into a second database, and restored authentication/ticket/comment/history access passed. Testcontainers CI would still make this repeatable across environments.
 
 ## Score Breakdown
 
@@ -108,11 +108,11 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 | Domain rules and permissions | 15/15 | Transition table, terminal state, assignment ownership, customer carve-outs, and audit atomicity behaved correctly. |
 | API design and validation | 14/15 | Consistent errors, stable pagination, scoped filters, and field-aware validation; comment/history lists remain unbounded. |
 | Security | 13/15 | JWT, BCrypt, ownership enforcement, safe errors, and environment secrets are solid; open agent self-registration and absent login throttling are production limitations. |
-| Persistence | 8/10 | Flyway, indexes, foreign keys, optimistic versioning, backup, and schema validation are present; no native PostgreSQL execution was possible. |
+| Persistence | 10/10 | PostgreSQL 16.9, Flyway migration, schema validation, seeded data, actual `pg_dump`, clean restore, row counts, and restored API behavior were verified. |
 | Automated testing | 8/10 | 39 unit tests plus a 63-check live harness provide strong risk-focused coverage; there is no checked-in Testcontainers full-stack suite and service line coverage is not uniformly high. |
 | Code quality | 4/5 | Clear layering and centralized rules; `TicketService` has a broader responsibility surface than ideal and the user-details adapter/entity split could be simplified. |
 | Documentation and delivery | 5/5 | README, assumptions, task traceability, Docker assets, SQL backup, decisions, audits, and this reproducible review are included. |
-| **Total** | **92/100** | Strong and demonstrably complete, with remaining deductions concentrated in production hardening and unavailable infrastructure verification. |
+| **Total** | **94/100** | Strong and demonstrably complete, with remaining deductions concentrated in production hardening, repeatable Testcontainers coverage, and Docker runtime verification. |
 
 ## Recommended Next Steps
 

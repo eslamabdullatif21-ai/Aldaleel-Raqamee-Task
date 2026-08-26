@@ -3,3 +3,5 @@ target/
 *.iml
 .env
 *.log
+.postgres-data/
+.postgres-review.log
