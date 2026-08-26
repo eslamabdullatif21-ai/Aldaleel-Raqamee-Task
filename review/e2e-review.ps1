@@ -71,6 +71,14 @@ $customer2Token = Login 'review.customer2@example.com'
 $agent1Token = Login 'review.agent1@example.com'
 $agent2Token = Login 'review.agent2@example.com'
 
+$preLimitStatuses = @()
+for ($i = 0; $i -lt 5; $i++) {
+    $attempt = Invoke-Api POST '/api/auth/login' @{ email='review.customer1@example.com'; password='wrong-password' }
+    $preLimitStatuses += $attempt.Status
+}
+$r = Invoke-Api POST '/api/auth/login' @{ email='review.customer1@example.com'; password='wrong-password' }
+Check 'Login rate limit returns too many requests' (($preLimitStatuses | Where-Object { $_ -ne 401 }).Count -eq 0 -and $r.Status -eq 429 -and $r.Json.status -eq 429) "pre-limit=$($preLimitStatuses -join ','), final=$($r.Status)"
+
 $r = Invoke-Api GET '/api/tickets' $null ($customer1Token + 'tampered')
 Check 'Tampered JWT is rejected' ($r.Status -eq 401) "HTTP $($r.Status)"
 $r = Invoke-Api GET '/api/does-not-exist' $null $customer1Token
@@ -117,7 +125,8 @@ $r = Invoke-Api PATCH "/api/tickets/$($ticket1.id)/assign" @{} $agent1Token
 $ticket1 = $r.Json
 Check 'Agent can self-assign without status change' ($r.Status -eq 200 -and $ticket1.assignedAgentId -eq $agent1.id -and $ticket1.status -eq 'OPEN') "HTTP $($r.Status), agent=$($ticket1.assignedAgentId), status=$($ticket1.status)"
 $r = Invoke-Api GET "/api/tickets/$($ticket1.id)/history" $null $agent1Token
-Check 'Creation and assignment history are recorded' ($r.Status -eq 200 -and $r.Json.Count -eq 2 -and $r.Json[0].eventType -eq 'STATUS_CHANGE' -and $r.Json[1].eventType -eq 'ASSIGNMENT') "HTTP $($r.Status), events=$($r.Json.Count)"
+$events = @($r.Json.content)
+Check 'Creation and assignment history are recorded' ($r.Status -eq 200 -and $r.Json.page.totalElements -eq 2 -and $events[0].eventType -eq 'STATUS_CHANGE' -and $events[1].eventType -eq 'ASSIGNMENT') "HTTP $($r.Status), events=$($r.Json.page.totalElements)"
 $r = Invoke-Api GET "/api/tickets/$($ticket1.id)" $null $agent2Token
 Check 'Unassigned agent cannot view ticket' ($r.Status -eq 403) "HTTP $($r.Status)"
 
@@ -130,8 +139,9 @@ $r = Invoke-Api POST "/api/tickets/$($ticket1.id)/comments" @{body='Intrusion'} 
 Check 'Other customer cannot comment' ($r.Status -eq 403) "HTTP $($r.Status)"
 $r = Invoke-Api GET "/api/tickets/$($ticket1.id)/comments" $null $agent2Token
 Check 'Other agent cannot list comments' ($r.Status -eq 403) "HTTP $($r.Status)"
-$r = Invoke-Api GET "/api/tickets/$($ticket1.id)/comments" $null $customer1Token
-Check 'Comments are chronological with author metadata' ($r.Status -eq 200 -and $r.Json.Count -eq 2 -and $r.Json[0].body -eq 'Agent diagnostic note' -and $r.Json[1].body -eq 'Customer follow-up' -and $r.Json[0].authorName) "HTTP $($r.Status), comments=$($r.Json.Count)"
+$r = Invoke-Api GET "/api/tickets/$($ticket1.id)/comments?size=500" $null $customer1Token
+$commentItems = @($r.Json.content)
+Check 'Comments are capped, paginated, and chronological with author metadata' ($r.Status -eq 200 -and $r.Json.page.size -eq 100 -and $r.Json.page.totalElements -eq 2 -and $commentItems[0].body -eq 'Agent diagnostic note' -and $commentItems[1].body -eq 'Customer follow-up' -and $commentItems[0].authorName) "HTTP $($r.Status), pageSize=$($r.Json.page.size), comments=$($r.Json.page.totalElements)"
 $longBody = 'x' * 5001
 $r = Invoke-Api POST "/api/tickets/$($ticket1.id)/comments" @{body=$longBody} $customer1Token
 Check 'Oversized comment is rejected' ($r.Status -eq 400) "HTTP $($r.Status)"
@@ -154,7 +164,7 @@ Check 'Invalid OPEN to RESOLVED transition conflicts' ($r.Status -eq 409 -and $r
 $r = Invoke-Api PATCH "/api/tickets/$($ticket1.id)/status" @{status='IN_PROGRESS';note=('n' * 1001)} $agent1Token
 Check 'Oversized status note is rejected' ($r.Status -eq 400 -and $r.Json.fieldErrors[0].field -eq 'note') "HTTP $($r.Status), field=$($r.Json.fieldErrors[0].field)"
 $r = Invoke-Api GET "/api/tickets/$($ticket1.id)/history" $null $agent1Token
-Check 'Rejected transition writes no history' ($r.Status -eq 200 -and $r.Json.Count -eq 2) "events=$($r.Json.Count)"
+Check 'Rejected transition writes no history' ($r.Status -eq 200 -and $r.Json.page.totalElements -eq 2) "events=$($r.Json.page.totalElements)"
 
 $transitions = @(
     @('IN_PROGRESS',$agent1Token,'Agent OPEN to IN_PROGRESS'),
@@ -173,9 +183,10 @@ foreach ($step in $transitions) {
 $r = Invoke-Api PATCH "/api/tickets/$($ticket1.id)/status" @{status='REOPENED'} $agent1Token
 Check 'CLOSED is terminal' ($r.Status -eq 409) "HTTP $($r.Status)"
 $r = Invoke-Api GET "/api/tickets/$($ticket1.id)/history" $null $customer1Token
+$historyItems = @($r.Json.content)
 $ordered = $true
-for ($i=1; $i -lt $r.Json.Count; $i++) { if ([datetime]$r.Json[$i].changedAt -lt [datetime]$r.Json[$i-1].changedAt) { $ordered = $false } }
-Check 'Full history is complete and chronological' ($r.Status -eq 200 -and $r.Json.Count -eq 10 -and $ordered -and $r.Json[-1].toStatus -eq 'CLOSED') "HTTP $($r.Status), events=$($r.Json.Count), ordered=$ordered"
+for ($i=1; $i -lt $historyItems.Count; $i++) { if ([datetime]$historyItems[$i].changedAt -lt [datetime]$historyItems[$i-1].changedAt) { $ordered = $false } }
+Check 'Full history is paginated, complete, and chronological' ($r.Status -eq 200 -and $r.Json.page.totalElements -eq 10 -and $ordered -and $historyItems[-1].toStatus -eq 'CLOSED') "HTTP $($r.Status), events=$($r.Json.page.totalElements), ordered=$ordered"
 
 $r = Invoke-Api PATCH "/api/tickets/$($ticket2.id)/assign" @{agentId=$agent2.id} $agent1Token
 Check 'Agent can assign a named agent' ($r.Status -eq 200 -and $r.Json.assignedAgentId -eq $agent2.id) "HTTP $($r.Status), agent=$($r.Json.assignedAgentId)"

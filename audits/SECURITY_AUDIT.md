@@ -1,6 +1,6 @@
 # Security Audit
 
-Audit date: 2026-08-25. Status legend: PASS, FIXED, LIMITATION.
+Audit date: 2026-08-26. Status legend: PASS, FIXED, LIMITATION.
 
 | Check | Status | Finding | Action |
 |---|---|---|---|
@@ -14,6 +14,6 @@ Audit date: 2026-08-25. Status legend: PASS, FIXED, LIMITATION.
 | Error leakage | PASS | Shared errors omit traces, SQL text, and internal exception names. | Unknown errors return a generic 500 message. |
 | CORS | PASS | Origins are environment-controlled; credentials are disabled and no wildcard is used. | None. |
 | Dependencies | PASS | Spring Boot 3.5.5 resolves Spring Security 6.5.3. | Version family reviewed during dependency resolution. |
-| Login rate limiting | LIMITATION | Brute-force throttling is not in the supplied assessment scope. | Documented for a production gateway/identity provider. |
+| Login rate limiting | PASS | A thread-safe fixed window limits attempts per observed client address and returns 429 with `Retry-After`. | Limits/window are environment-configurable; use a trusted gateway or shared limiter for multiple app instances. |
 
 The public role field on registration is an explicit assessment convenience; production agent provisioning requires privileged administration.

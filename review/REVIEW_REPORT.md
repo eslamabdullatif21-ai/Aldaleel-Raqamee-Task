@@ -1,12 +1,12 @@
 # Independent Reviewer-Style Test Report
 
-**Review date:** 2026-08-25  
-**Final score:** **94/100**
+**Review date:** 2026-08-26
+**Final score:** **96/100**
 **Verdict:** Strong assessment submission. All required ticketing behavior passed live black-box testing after the defects found during review were corrected. PostgreSQL migration, data creation, `pg_dump`, clean restore, restored login, and restored API reads were also verified. Docker remains the main unexecuted delivery path.
 
 ## Executive Summary
 
-The application was started as an HTTP service against a new isolated database and used through its public REST API with two customer accounts and two agent accounts. This was separate from the JUnit/Mockito test suite. The final live pass executed **63 checks and passed 63**. The Maven regression suite executed **39 tests and passed 39**. A clean Maven `verify` produced the executable JAR.
+The application was started as an HTTP service against a new isolated database and used through its public REST API with two customer accounts and two agent accounts. This was separate from the JUnit/Mockito test suite. The final live pass executed **64 checks and passed 64**. The Maven regression suite executed **47 tests and passed 47**. A clean Maven build produced the executable JAR.
 
 The live pass covered registration, login, invalid/tampered authentication, ticket creation and defaults, server-controlled ownership, pagination, combined filters, direct resource access, assignment/reassignment, priority changes, comments, every allowed transition edge, invalid and terminal transitions, customer resolution actions, append-only history, role/ownership isolation, validation bodies, and expected HTTP error codes.
 
@@ -14,8 +14,8 @@ The live pass covered registration, login, invalid/tampered authentication, tick
 
 | Verification | Result |
 |---|---|
-| Live black-box HTTP review | **63/63 passed** |
-| JUnit/Mockito regression | **39/39 passed** |
+| Live black-box HTTP review | **64/64 passed** |
+| JUnit/Mockito regression | **47/47 passed** |
 | State-machine matrix | **25/25 status pairs tested**, plus explicit terminal-state test |
 | Flyway | V1 migration validated and applied to an empty database |
 | Hibernate | Schema validation passed with `ddl-auto=validate` |
@@ -91,8 +91,8 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 - Registration accepts a caller-selected `CUSTOMER`/`AGENT` role for assessment usability. Production agent provisioning should be privileged.
 - JWT expiry defaults to one hour and is environment-configurable.
 - Comments are immutable because no update/delete contract was requested.
-- Comment and history endpoints are intentionally unpaginated to preserve the supplied API response contract.
-- The included SQL backup contains the schema but no seeded credentials or customer data.
+- Comment and history endpoints are capped, paginated, and chronologically ordered.
+- The included SQL backup contains the verified demo dataset documented in `db/BACKUP-MANIFEST.md`.
 
 ## Environment Limitations
 
@@ -106,17 +106,17 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 |---|---:|---|
 | Functional completeness | 25/25 | All TASK-001 through TASK-012 behaviors passed live HTTP review. |
 | Domain rules and permissions | 15/15 | Transition table, terminal state, assignment ownership, customer carve-outs, and audit atomicity behaved correctly. |
-| API design and validation | 14/15 | Consistent errors, stable pagination, scoped filters, and field-aware validation; comment/history lists remain unbounded. |
-| Security | 13/15 | JWT, BCrypt, ownership enforcement, safe errors, and environment secrets are solid; open agent self-registration and absent login throttling are production limitations. |
+| API design and validation | 15/15 | Consistent errors, capped stable pagination, scoped filters, and field-aware validation cover every collection endpoint. |
+| Security | 14/15 | JWT, BCrypt, ownership enforcement, safe errors, environment secrets, and login throttling are solid; open agent self-registration remains an assessment-only limitation. |
 | Persistence | 10/10 | PostgreSQL 16.9, Flyway migration, schema validation, seeded data, actual `pg_dump`, clean restore, row counts, and restored API behavior were verified. |
-| Automated testing | 8/10 | 39 unit tests plus a 63-check live harness provide strong risk-focused coverage; there is no checked-in Testcontainers full-stack suite and service line coverage is not uniformly high. |
+| Automated testing | 8/10 | 47 unit tests plus a live black-box harness provide strong risk-focused coverage; there is no checked-in Testcontainers full-stack suite and service line coverage is not uniformly high. |
 | Code quality | 4/5 | Clear layering and centralized rules; `TicketService` has a broader responsibility surface than ideal and the user-details adapter/entity split could be simplified. |
 | Documentation and delivery | 5/5 | README, assumptions, task traceability, Docker assets, SQL backup, decisions, audits, and this reproducible review are included. |
-| **Total** | **94/100** | Strong and demonstrably complete, with remaining deductions concentrated in production hardening, repeatable Testcontainers coverage, and Docker runtime verification. |
+| **Total** | **96/100** | Strong and demonstrably complete, with remaining deductions concentrated in multi-instance hardening, repeatable Testcontainers coverage, and Docker runtime verification. |
 
 ## Recommended Next Steps
 
 1. Add a Testcontainers PostgreSQL integration suite to CI and run the same lifecycle against PostgreSQL 16.
-2. Move agent provisioning behind an administrator/identity provider and add login throttling at the gateway or shared rate limiter.
-3. Paginate comments and history if the API contract can evolve.
+2. Move agent provisioning behind an administrator/identity provider and move login throttling to a gateway/shared limiter when deploying multiple app instances.
+3. Consider cursor pagination only if individual ticket timelines grow beyond normal support-ticket volumes.
 4. Split query/timeline operations from `TicketService` if the domain grows.

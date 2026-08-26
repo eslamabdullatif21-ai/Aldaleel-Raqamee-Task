@@ -32,6 +32,9 @@ export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/support_ticketing
 export SPRING_DATASOURCE_USERNAME=app
 export SPRING_DATASOURCE_PASSWORD=your-password
 export JWT_SECRET=a-random-secret-containing-at-least-32-bytes
+# Optional: defaults shown
+export LOGIN_RATE_LIMIT_MAX_ATTEMPTS=10
+export LOGIN_RATE_LIMIT_WINDOW=PT1M
 mvn spring-boot:run
 ```
 
@@ -60,7 +63,7 @@ The dump contains 2 users, 2 tickets, 3 comments, and 7 history events. `db/seed
 mvn test
 ```
 
-The implemented suite has 39 passing tests. JaCoCo output is generated at `target/site/jacoco/index.html`; measured line coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for `JwtService`, and 56% for `TicketService`. The tests prioritize transition and permission rules over trivial persistence plumbing.
+The implemented suite has 47 passing tests. JaCoCo output is generated at `target/site/jacoco/index.html`; measured line coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for `JwtService`, 88% for `LoginRateLimiter`, and 66% for `TicketService`. The tests prioritize transition, permission, pagination, and throttling rules over trivial persistence plumbing.
 
 For a full reviewer-style pass, start the API with its isolated test profile in one terminal and run the black-box harness in another:
 
@@ -73,7 +76,17 @@ mvn spring-boot:test-run
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File review\e2e-review.ps1
 ```
 
-The final review executed 63 live HTTP checks with 63 passes, including Flyway migration and Hibernate schema validation. See [the scored review report](review/REVIEW_REPORT.md).
+The final review executed 64 live HTTP checks with 64 passes, including pagination, login throttling, Flyway migration, and Hibernate schema validation. See [the scored review report](review/REVIEW_REPORT.md).
+
+For a bounded k6 concurrency run against a started application, use the reusable
+review profile (30 VUs by default):
+
+```powershell
+k6 run -e VUS=1000 -e DURATION=10s review/k6-boundary.js
+```
+
+The 1,000/5,000/10,000-VU single-instance measurements and their limitations
+are recorded in [the performance audit](audits/PERFORMANCE_AUDIT.md).
 
 ## API Documentation
 
@@ -89,8 +102,8 @@ The full contract is [04-API-SPEC.md](04-API-SPEC.md). All endpoints except regi
 | PATCH | `/api/tickets/{id}/assign` | Assign or reassign to an agent |
 | PATCH | `/api/tickets/{id}/status` | Apply a valid status transition |
 | PATCH | `/api/tickets/{id}/priority` | Change priority |
-| POST/GET | `/api/tickets/{id}/comments` | Add/list immutable comments |
-| GET | `/api/tickets/{id}/history` | List creation, assignment, and status events |
+| POST/GET | `/api/tickets/{id}/comments` | Add/list paginated immutable comments |
+| GET | `/api/tickets/{id}/history` | Paginated creation, assignment, and status events |
 
 ## Architecture and Design Patterns
 
@@ -146,20 +159,21 @@ stateDiagram-v2
 - Registration accepts a role for assessment usability. Agent provisioning would be admin-controlled in production.
 - JWTs expire after one hour by default. The signing secret must be at least 32 bytes and comes from the environment.
 - Assignment and status events share one immutable timeline. Creation records `null -> OPEN`.
-- Comment/history list endpoints are chronological but unpaginated because the supplied API contract calls for lists; pagination is the documented scaling follow-up.
+- Comment/history pages are capped at 100 records and always use stable chronological ordering.
+- Login permits 10 attempts per observed client address per minute by default. This in-memory limiter is appropriate for a single instance; a trusted gateway or shared limiter is required when horizontally scaling.
 - H2 is used only for lightweight test configuration; unit tests isolate domain logic with Mockito. Production remains PostgreSQL-only.
 
 ## Bonuses Implemented
 
 - Database: PostgreSQL with Flyway and `db/backup.sql`.
 - Docker: multi-stage non-root image plus app/database Compose stack.
-- Unit tests: 39 tests with JaCoCo reporting.
+- Unit tests: 47 tests with JaCoCo reporting.
 
 ## Audits
 
 - [Code quality audit](audits/CODE_QUALITY_AUDIT.md): layering and single-source rules passed; test coverage is intentionally risk-weighted rather than uniform.
-- [Security audit](audits/SECURITY_AUDIT.md): authorization and secret handling passed; login rate limiting is an accepted out-of-scope production hardening item.
-- [Performance audit](audits/PERFORMANCE_AUDIT.md): ticket listing is paginated/indexed; unpaginated comments/history and unavailable Docker runtime measurements are documented limitations.
+- [Security audit](audits/SECURITY_AUDIT.md): authorization, secret handling, and single-instance login rate limiting passed.
+- [Performance audit](audits/PERFORMANCE_AUDIT.md): ticket, comment, and history listing are paginated and indexed.
 
 ## Incomplete / Deviated Requirements
 

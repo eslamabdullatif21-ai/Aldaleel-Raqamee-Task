@@ -40,6 +40,8 @@ otherwise.
 - Body: `{ "email", "password" }`.
 - `200 OK` → `{ "token": "<jwt>", "expiresAt": "..." }`.
 - `401 Unauthorized` if credentials invalid.
+- `429 Too Many Requests` after the configured number of attempts from the
+  observed client address. The response includes `Retry-After` in seconds.
 
 ---
 
@@ -104,7 +106,9 @@ otherwise.
 ### `GET /api/tickets/{id}/comments`
 - Role: ticket's customer, or its assigned agent (same rule as posting a
   comment).
-- `200 OK` → chronological list.
+- Query params: `page` and `size` (default 20, maximum 100).
+- `200 OK` → paginated comments in stable chronological order. Client-provided
+  sorting is ignored so page boundaries cannot change the audit chronology.
 
 ---
 
@@ -112,8 +116,9 @@ otherwise.
 
 ### `GET /api/tickets/{id}/history`
 - Role: ticket's customer, or its assigned agent.
-- `200 OK` → chronological list of `StatusHistory` records (both event
-  types, per `03-DATA-MODEL.md`).
+- Query params: `page` and `size` (default 20, maximum 100).
+- `200 OK` → paginated `StatusHistory` records in stable chronological order
+  (both event types, per `03-DATA-MODEL.md`).
 
 ---
 
@@ -128,6 +133,7 @@ otherwise.
 | 403 | Authenticated, but not permitted for this action/resource |
 | 404 | Resource doesn't exist |
 | 409 | Well-formed request conflicts with current resource state (invalid transition, duplicate email) |
+| 429 | Login attempt limit exceeded; retry after the response's `Retry-After` delay |
 | 500 | Unhandled server error (should be rare — every expected failure mode above has a specific code) |
 
 ## API documentation
