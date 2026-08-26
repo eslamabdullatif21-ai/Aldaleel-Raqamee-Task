@@ -1,4 +1,7 @@
 spring:
+  threads:
+    virtual:
+      enabled: false
   datasource:
     url: jdbc:h2:mem:tickets;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
     username: sa
@@ -12,3 +15,4 @@ app:
   jwt:
     secret: test-only-secret-key-with-at-least-thirty-two-bytes
     expiration: PT1H
+    user-cache-ttl: PT1M
