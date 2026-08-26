@@ -6,7 +6,7 @@ A Spring Boot REST API for creating, assigning, and managing support tickets, wi
 
 - Java 21 and Spring Boot 3.5.5 (Web, Data JPA, Security, Validation)
 - PostgreSQL 16 and Flyway migrations
-- JWT (HS256), a bounded principal cache, and BCrypt password hashing
+- HMAC-signed JWT, a bounded principal cache, and BCrypt password hashing
 - JUnit 5, Mockito, H2 test profile, and JaCoCo
 - Docker and Docker Compose
 
@@ -45,7 +45,7 @@ PowerShell uses `$env:VARIABLE_NAME='value'` instead of `export`.
 
 ## Restoring the Database Backup
 
-A PostgreSQL 16.9 schema-and-data dump generated with `pg_dump` is included at `db/backup.sql`. It contains the Flyway schema history and demo data; see `db/BACKUP-MANIFEST.md` for verified counts and checksum.
+A PostgreSQL 16.9 schema-and-data dump generated with `pg_dump` is included at `db/backup.sql`. It contains the Flyway schema history and demo data. Its verified SHA-256 is `F0A5FB07EF2A54821FFCBB16DAF7DC31DF7681952FC2E4AB9AD3948D2847E0AE`.
 
 ```bash
 docker compose exec -T postgres psql -U app -d support_ticketing < db/backup.sql
@@ -58,7 +58,7 @@ Demo accounts included in the dump:
 | Customer | `customer@example.com` | `Customer123!` |
 | Agent | `agent@example.com` | `Agent123!` |
 
-The dump contains 2 users, 2 tickets, 3 comments, and 7 history events. `db/seed-demo.ps1` reproduces the dataset through the public API on a fresh database.
+The dump contains 2 users, 2 tickets, 3 comments, and 7 history events.
 
 ## Running Tests
 
@@ -66,35 +66,39 @@ The dump contains 2 users, 2 tickets, 3 comments, and 7 history events. `db/seed
 mvn test
 ```
 
-The implemented suite has 55 passing tests. JaCoCo output is generated at `target/site/jacoco/index.html`; measured line coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for `JwtAuthenticationFilter`, 92% for `JwtUserCache`, 89% for `JwtService`, 88% for `LoginRateLimiter`, and 66% for `TicketService`. Dedicated tests also prove that the JWT filter verifies once, uses the cache once, excludes password hashes, reloads after expiry, and does not query users for invalid tokens. The tests prioritize transition, permission, pagination, authentication, and throttling rules over trivial persistence plumbing.
+The implemented suite has 55 passing tests. It was run both with the host's
+Java 17 compatibility override and inside a Temurin Java 21 Maven container.
+JaCoCo output is generated at `target/site/jacoco/index.html`; measured line
+coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for
+`JwtAuthenticationFilter`, 92% for `JwtUserCache`, 89% for `JwtService`, 88% for
+`LoginRateLimiter`, and 66% for `TicketService`. Dedicated tests also prove that
+the JWT filter verifies once, uses the cache once, excludes password hashes,
+reloads after expiry, and does not query users for invalid tokens. The tests
+prioritize transition, permission, pagination, authentication, and throttling
+rules over trivial persistence plumbing.
 
-For a full reviewer-style pass, start the API with its isolated test profile in one terminal and run the black-box harness in another:
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE='test'
-$env:JWT_SECRET='review-only-secret-key-containing-at-least-thirty-two-bytes'
-mvn spring-boot:test-run
-
-# Second terminal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File review\e2e-review.ps1
-```
-
-The final review executed 64 live HTTP checks with 64 passes, including pagination, login throttling, Flyway migration, and Hibernate schema validation. See [the scored review report](review/REVIEW_REPORT.md).
-
-For a bounded k6 concurrency run against a started application, use the reusable
-review profile (30 VUs by default). It ramps up for 15 seconds, holds for 15,
-ramps down for 5, and gives each virtual user a 10-second think time:
+For the retained aggressive k6 boundary test, start the API and run:
 
 ```powershell
-k6 run -e VUS=1000 -e RAMP_DURATION=15s -e HOLD_DURATION=15s `
-  -e RAMP_DOWN_DURATION=5s -e THINK_SECONDS=10 review/k6-boundary.js
+k6 run -e VUS=1000 -e DURATION=10s -e THINK_SECONDS=1 review/k6-boundary.js
 ```
 
-The tuned single instance passed the profile at 1,000, 5,000, and 10,000 VUs
-with zero failed requests. These are same-host, read-heavy measurements—not a
-general production capacity claim. Run k6 from a separate machine for a valid
-deployment benchmark. Full measurements and limitations are in
-[the performance audit](audits/PERFORMANCE_AUDIT.md).
+This profile activates every VU immediately, so it intentionally tests connection
+storm and saturation behavior. The latest run used a containerized k6 generator
+on the same Docker network as the Java 21 application:
+
+| VUs | Requests | Failed | Requests/second | Successful p95 |
+|---:|---:|---:|---:|---:|
+| 1,000 | 10,001 | 0% | 951 | 118.51 ms |
+| 5,000 | 47,765 | 0% | 4,318 | 519.4 ms |
+| 10,000 | 18,917 | 33.96% | 1,238 | 6.3 s |
+
+The 10,000-VU tier saturated and timed out requests, although the application
+remained running with no restart or OOM and recovered immediately. The former
+gentle profile ramped users and used a ten-second think time, producing about one
+tenth of the pressure and zero failures; it measured mostly-idle concurrent users
+rather than the same workload. These same-host results are comparative evidence,
+not production capacity figures; use a separate load generator for sizing.
 
 ## Single-Instance Performance Profile
 
@@ -119,7 +123,7 @@ older builds do not contain the required user ID claim and require one re-login.
 
 ## API Documentation
 
-The full contract is [04-API-SPEC.md](04-API-SPEC.md). All endpoints except registration and login require `Authorization: Bearer <token>`.
+All endpoints except registration and login require `Authorization: Bearer <token>`.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -180,17 +184,16 @@ stateDiagram-v2
 | TASK-011 Invalid-transition prevention | `TicketStateMachine#validateTransition`, HTTP 409 handler |
 | TASK-012 Status history | `domain/entity/StatusHistory.java`, `TicketService#history` |
 
-## Assumptions and Decisions
+## Assumptions, Decisions, and Tradeoffs
 
-- Omitted creation priority defaults to `MEDIUM`; status always starts at `OPEN` and assignment starts null.
-- Any agent may claim or reassign a ticket. Status, priority, viewing, comments, and history then require that agent to be assigned.
-- A customer may change their own `RESOLVED` ticket to `CLOSED` or `REOPENED`; all other customer status changes are forbidden.
-- Registration accepts a role for assessment usability. Agent provisioning would be admin-controlled in production.
-- JWTs expire after one hour by default. The signing secret must be at least 32 bytes and comes from the environment. Signed identity claims are checked against a password-free user snapshot cached for one minute by default.
-- Assignment and status events share one immutable timeline. Creation records `null -> OPEN`.
-- Comment/history pages are capped at 100 records and always use stable chronological ordering.
-- Login permits 10 attempts per observed client address per minute by default. This in-memory limiter is appropriate for a single instance; a trusted gateway or shared limiter is required when horizontally scaling.
-- H2 is used only for lightweight test configuration; unit tests isolate domain logic with Mockito. Production remains PostgreSQL-only.
+The complete project-wide record is [ASSUMPTIONS-DECISIONS-TRADEOFFS.md](<not task/ASSUMPTIONS-DECISIONS-TRADEOFFS.md>). Key choices are:
+
+- Omitted priority defaults to `MEDIUM`; tickets start `OPEN` and unassigned.
+- Any agent may claim/reassign, but only the assigned agent may manage or view the ticket.
+- The customer may close or reopen their own resolved ticket; all other customer status changes are forbidden.
+- Registration accepts an agent role only to keep the assessment self-contained.
+- Status, creation, and assignment events form one immutable chronological timeline.
+- JWT user caching and login throttling are deliberately single-instance mechanisms.
 
 ## Bonuses Implemented
 
@@ -198,12 +201,6 @@ stateDiagram-v2
 - Docker: multi-stage non-root image plus app/database Compose stack.
 - Unit tests: 55 tests with JaCoCo reporting.
 
-## Audits
-
-- [Code quality audit](audits/CODE_QUALITY_AUDIT.md): layering and single-source rules passed; test coverage is intentionally risk-weighted rather than uniform.
-- [Security audit](audits/SECURITY_AUDIT.md): authorization, secret handling, and single-instance login rate limiting passed.
-- [Performance audit](audits/PERFORMANCE_AUDIT.md): ticket, comment, and history listing are paginated and indexed.
-
 ## Incomplete / Deviated Requirements
 
-All feature tasks TASK-001 through TASK-012 are implemented. PostgreSQL 16.9 was run locally: Flyway migrated an empty database, demo data was created through the API, `pg_dump` generated the backup, and that dump was restored into a second database where counts, Flyway validation, authentication, ticket listing, comments, and history were verified. Docker is not installed, so the Compose stack itself could only be statically checked. The installed JDK was Java 17, so the passing build used a temporary `-Djava.version=17` verification override while the committed project and Docker image remain targeted to Java 21.
+All feature tasks TASK-001 through TASK-012 are implemented. PostgreSQL 16.9 was used to create and independently restore the supplied dump. The submitted Compose stack was also built and run with Docker Engine 29.1.3 and Compose 2.40.3: PostgreSQL 16.15 restored the dump into a confirmed-empty database, Flyway and Hibernate validated it, the application ran as a non-root user on Temurin Java 21.0.12, all 64 black-box API checks passed, and the 55-test Maven suite passed in a separate Java 21 container. The host JDK remains Java 17, so host Maven verification uses `-Djava.version=17`. The GitHub remote is configured, but no push was performed because the repository is being prepared for review first.
