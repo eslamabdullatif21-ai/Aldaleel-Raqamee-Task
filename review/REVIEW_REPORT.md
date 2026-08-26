@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-The application was started as an HTTP service against a new isolated database and used through its public REST API with two customer accounts and two agent accounts. This was separate from the JUnit/Mockito test suite. The final live pass executed **64 checks and passed 64**. The Maven regression suite executed **47 tests and passed 47**. A clean Maven build produced the executable JAR.
+The application was started as an HTTP service against a new isolated database and used through its public REST API with two customer accounts and two agent accounts. This was separate from the JUnit/Mockito test suite. The final live pass executed **64 checks and passed 64**. The Maven regression suite executed **55 tests and passed 55**. A clean Maven build produced the executable JAR.
 
 The live pass covered registration, login, invalid/tampered authentication, ticket creation and defaults, server-controlled ownership, pagination, combined filters, direct resource access, assignment/reassignment, priority changes, comments, every allowed transition edge, invalid and terminal transitions, customer resolution actions, append-only history, role/ownership isolation, validation bodies, and expected HTTP error codes.
 
@@ -15,7 +15,8 @@ The live pass covered registration, login, invalid/tampered authentication, tick
 | Verification | Result |
 |---|---|
 | Live black-box HTTP review | **64/64 passed** |
-| JUnit/Mockito regression | **47/47 passed** |
+| JUnit/Mockito regression | **55/55 passed** |
+| Ramped k6 single-instance review | **1,000/5,000/10,000 VUs; zero request failures** |
 | State-machine matrix | **25/25 status pairs tested**, plus explicit terminal-state test |
 | Flyway | V1 migration validated and applied to an empty database |
 | Hibernate | Schema validation passed with `ddl-auto=validate` |
@@ -90,6 +91,7 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 - Assignment and status events share one immutable chronological history endpoint.
 - Registration accepts a caller-selected `CUSTOMER`/`AGENT` role for assessment usability. Production agent provisioning should be privileged.
 - JWT expiry defaults to one hour and is environment-configurable.
+- The JWT principal cache defaults to one minute; role/email/deletion changes may take that long to invalidate an existing token, while password login always uses current database state.
 - Comments are immutable because no update/delete contract was requested.
 - Comment and history endpoints are capped, paginated, and chronologically ordered.
 - The included SQL backup contains the verified demo dataset documented in `db/BACKUP-MANIFEST.md`.
@@ -98,6 +100,7 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 
 - The project and container remain targeted to **Java 21**, but the available review host had Java 17. Compilation/tests therefore used a temporary Maven `-Djava.version=17` override. No Java-17-only project change was committed.
 - Docker was not installed, so `docker compose up --build` and the non-root container image could only be statically reviewed.
+- The load generator and API shared one host, and Java 21 was unavailable, so the k6 results are boundary evidence rather than a production capacity rating and virtual threads were disabled for that run.
 - PostgreSQL 16.9 was run directly. Flyway migrated a fresh database, demo data was created through the HTTP API, an actual `pg_dump` was restored into a second database, and restored authentication/ticket/comment/history access passed. Testcontainers CI would still make this repeatable across environments.
 
 ## Score Breakdown
@@ -109,7 +112,7 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 | API design and validation | 15/15 | Consistent errors, capped stable pagination, scoped filters, and field-aware validation cover every collection endpoint. |
 | Security | 14/15 | JWT, BCrypt, ownership enforcement, safe errors, environment secrets, and login throttling are solid; open agent self-registration remains an assessment-only limitation. |
 | Persistence | 10/10 | PostgreSQL 16.9, Flyway migration, schema validation, seeded data, actual `pg_dump`, clean restore, row counts, and restored API behavior were verified. |
-| Automated testing | 8/10 | 47 unit tests plus a live black-box harness provide strong risk-focused coverage; there is no checked-in Testcontainers full-stack suite and service line coverage is not uniformly high. |
+| Automated testing | 8/10 | 55 unit tests plus a live black-box harness and reusable k6 profile provide strong risk-focused coverage; there is no checked-in Testcontainers full-stack suite and service line coverage is not uniformly high. |
 | Code quality | 4/5 | Clear layering and centralized rules; `TicketService` has a broader responsibility surface than ideal and the user-details adapter/entity split could be simplified. |
 | Documentation and delivery | 5/5 | README, assumptions, task traceability, Docker assets, SQL backup, decisions, audits, and this reproducible review are included. |
 | **Total** | **96/100** | Strong and demonstrably complete, with remaining deductions concentrated in multi-instance hardening, repeatable Testcontainers coverage, and Docker runtime verification. |
@@ -120,3 +123,4 @@ The reproducible live harness is [e2e-review.ps1](e2e-review.ps1). It starts fro
 2. Move agent provisioning behind an administrator/identity provider and move login throttling to a gateway/shared limiter when deploying multiple app instances.
 3. Consider cursor pagination only if individual ticket timelines grow beyond normal support-ticket volumes.
 4. Split query/timeline operations from `TicketService` if the domain grows.
+5. Run the k6 profile from a separate load-generator host before setting production SLOs.

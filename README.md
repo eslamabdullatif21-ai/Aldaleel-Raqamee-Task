@@ -6,7 +6,7 @@ A Spring Boot REST API for creating, assigning, and managing support tickets, wi
 
 - Java 21 and Spring Boot 3.5.5 (Web, Data JPA, Security, Validation)
 - PostgreSQL 16 and Flyway migrations
-- JWT (HS256) and BCrypt password hashing
+- JWT (HS256), a bounded principal cache, and BCrypt password hashing
 - JUnit 5, Mockito, H2 test profile, and JaCoCo
 - Docker and Docker Compose
 
@@ -35,6 +35,9 @@ export JWT_SECRET=a-random-secret-containing-at-least-32-bytes
 # Optional: defaults shown
 export LOGIN_RATE_LIMIT_MAX_ATTEMPTS=10
 export LOGIN_RATE_LIMIT_WINDOW=PT1M
+export JWT_USER_CACHE_TTL=PT1M
+export VIRTUAL_THREADS_ENABLED=true
+export JAVA_TOOL_OPTIONS="-Xms1g -Xmx2g"
 mvn spring-boot:run
 ```
 
@@ -63,7 +66,7 @@ The dump contains 2 users, 2 tickets, 3 comments, and 7 history events. `db/seed
 mvn test
 ```
 
-The implemented suite has 47 passing tests. JaCoCo output is generated at `target/site/jacoco/index.html`; measured line coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for `JwtService`, 88% for `LoginRateLimiter`, and 66% for `TicketService`. The tests prioritize transition, permission, pagination, and throttling rules over trivial persistence plumbing.
+The implemented suite has 55 passing tests. JaCoCo output is generated at `target/site/jacoco/index.html`; measured line coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for `JwtAuthenticationFilter`, 92% for `JwtUserCache`, 89% for `JwtService`, 88% for `LoginRateLimiter`, and 66% for `TicketService`. Dedicated tests also prove that the JWT filter verifies once, uses the cache once, excludes password hashes, reloads after expiry, and does not query users for invalid tokens. The tests prioritize transition, permission, pagination, authentication, and throttling rules over trivial persistence plumbing.
 
 For a full reviewer-style pass, start the API with its isolated test profile in one terminal and run the black-box harness in another:
 
@@ -79,14 +82,40 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File review\e2e-review.ps1
 The final review executed 64 live HTTP checks with 64 passes, including pagination, login throttling, Flyway migration, and Hibernate schema validation. See [the scored review report](review/REVIEW_REPORT.md).
 
 For a bounded k6 concurrency run against a started application, use the reusable
-review profile (30 VUs by default):
+review profile (30 VUs by default). It ramps up for 15 seconds, holds for 15,
+ramps down for 5, and gives each virtual user a 10-second think time:
 
 ```powershell
-k6 run -e VUS=1000 -e DURATION=10s review/k6-boundary.js
+k6 run -e VUS=1000 -e RAMP_DURATION=15s -e HOLD_DURATION=15s `
+  -e RAMP_DOWN_DURATION=5s -e THINK_SECONDS=10 review/k6-boundary.js
 ```
 
-The 1,000/5,000/10,000-VU single-instance measurements and their limitations
-are recorded in [the performance audit](audits/PERFORMANCE_AUDIT.md).
+The tuned single instance passed the profile at 1,000, 5,000, and 10,000 VUs
+with zero failed requests. These are same-host, read-heavy measurements—not a
+general production capacity claim. Run k6 from a separate machine for a valid
+deployment benchmark. Full measurements and limitations are in
+[the performance audit](audits/PERFORMANCE_AUDIT.md).
+
+## Single-Instance Performance Profile
+
+The defaults are intentionally bounded and environment-configurable:
+
+| Setting | Default | Purpose |
+|---|---:|---|
+| JWT principal cache | 1 minute | Avoid a PostgreSQL user lookup on every authenticated request |
+| Hikari pool | 16 fixed connections | Bound database concurrency and keep connections ready |
+| Tomcat max connections / accept queue | 12,000 / 2,000 | Absorb connection bursts before refusing sockets |
+| Java 21 virtual threads | Enabled | Reduce the cost of blocking request concurrency |
+| JVM heap | 1-2 GiB in Compose/example environment | Make memory capacity explicit |
+
+`JwtAuthenticationFilter` verifies each JWT once. The signed token carries user
+ID, email, and role, while the local cache carries a password-free snapshot of
+the current user. Normal password login still queries PostgreSQL and checks the
+current BCrypt hash. User deletion, email changes, and role changes can remain
+cached for at most `JWT_USER_CACHE_TTL`; after refresh, an old token whose signed
+claims no longer match is rejected and the user must log in again. Set a shorter
+TTL for faster revocation at the cost of more database reads. Tokens issued by
+older builds do not contain the required user ID claim and require one re-login.
 
 ## API Documentation
 
@@ -157,7 +186,7 @@ stateDiagram-v2
 - Any agent may claim or reassign a ticket. Status, priority, viewing, comments, and history then require that agent to be assigned.
 - A customer may change their own `RESOLVED` ticket to `CLOSED` or `REOPENED`; all other customer status changes are forbidden.
 - Registration accepts a role for assessment usability. Agent provisioning would be admin-controlled in production.
-- JWTs expire after one hour by default. The signing secret must be at least 32 bytes and comes from the environment.
+- JWTs expire after one hour by default. The signing secret must be at least 32 bytes and comes from the environment. Signed identity claims are checked against a password-free user snapshot cached for one minute by default.
 - Assignment and status events share one immutable timeline. Creation records `null -> OPEN`.
 - Comment/history pages are capped at 100 records and always use stable chronological ordering.
 - Login permits 10 attempts per observed client address per minute by default. This in-memory limiter is appropriate for a single instance; a trusted gateway or shared limiter is required when horizontally scaling.
@@ -167,7 +196,7 @@ stateDiagram-v2
 
 - Database: PostgreSQL with Flyway and `db/backup.sql`.
 - Docker: multi-stage non-root image plus app/database Compose stack.
-- Unit tests: 47 tests with JaCoCo reporting.
+- Unit tests: 55 tests with JaCoCo reporting.
 
 ## Audits
 

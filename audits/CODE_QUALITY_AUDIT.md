@@ -16,4 +16,4 @@ Audit date: 2026-08-26. Status legend: PASS, FIXED, LIMITATION.
 | Formatting | PASS | Consistent Java formatting and no mixed generated source were observed. | Manual review; no formatter plugin added solely for the assessment. |
 | Non-obvious rule comments | PASS | State machine and permission policy point to the source specification. | None. |
 
-Verification: `mvn test` passed 47 tests; JaCoCo report generated successfully.
+Verification: `mvn test` passed 55 tests; JaCoCo report generated successfully.
