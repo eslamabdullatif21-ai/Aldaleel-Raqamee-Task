@@ -4,7 +4,7 @@ CREATE TABLE users (
     password_hash VARCHAR(100) NOT NULL,
     name VARCHAR(120) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('CUSTOMER', 'AGENT')),
-    created_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT uq_users_email UNIQUE (email)
 );
 
@@ -17,8 +17,8 @@ CREATE TABLE tickets (
     status VARCHAR(30) NOT NULL CHECK (status IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REOPENED')),
     customer_id UUID NOT NULL REFERENCES users(id),
     assigned_agent_id UUID REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     version BIGINT NOT NULL DEFAULT 0
 );
 
@@ -27,7 +27,7 @@ CREATE TABLE comments (
     ticket_id UUID NOT NULL REFERENCES tickets(id),
     author_id UUID NOT NULL REFERENCES users(id),
     body TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
 CREATE TABLE status_history (
@@ -39,7 +39,7 @@ CREATE TABLE status_history (
     from_agent_id UUID,
     to_agent_id UUID,
     changed_by UUID NOT NULL REFERENCES users(id),
-    changed_at TIMESTAMPTZ NOT NULL,
+    changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
     note VARCHAR(1000)
 );
 
