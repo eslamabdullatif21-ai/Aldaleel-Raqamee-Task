@@ -55,6 +55,19 @@ mvn test
 
 The implemented suite has 39 passing tests. JaCoCo output is generated at `target/site/jacoco/index.html`; measured line coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for `JwtService`, and 56% for `TicketService`. The tests prioritize transition and permission rules over trivial persistence plumbing.
 
+For a full reviewer-style pass, start the API with its isolated test profile in one terminal and run the black-box harness in another:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE='test'
+$env:JWT_SECRET='review-only-secret-key-containing-at-least-thirty-two-bytes'
+mvn spring-boot:test-run
+
+# Second terminal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File review\e2e-review.ps1
+```
+
+The final review executed 63 live HTTP checks with 63 passes, including Flyway migration and Hibernate schema validation. See [the scored review report](review/REVIEW_REPORT.md).
+
 ## API Documentation
 
 The full contract is [04-API-SPEC.md](04-API-SPEC.md). All endpoints except registration and login require `Authorization: Bearer <token>`.
