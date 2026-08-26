@@ -1,0 +1,19 @@
+# Security Audit
+
+Audit date: 2026-08-25. Status legend: PASS, FIXED, LIMITATION.
+
+| Check | Status | Finding | Action |
+|---|---|---|---|
+| Secrets | PASS | Runtime credentials use environment variables; committed values are explicitly local placeholders. | `.env` is ignored; `.env.example` documents rotation. |
+| Passwords | PASS | BCrypt is used and no response contains `passwordHash`. | Registration constrains BCrypt-safe 8-72 character input. |
+| SQL injection | PASS | All data access uses Spring Data/JPA criteria; there is no concatenated SQL. | None. |
+| Authorization matrix | PASS | Creation has coarse role security; all resource actions use centralized owner/assigned-agent checks. | Permission tests exercise each distinct matrix rule. |
+| IDOR | PASS | Direct ticket lookup is followed by `assertCanView`; another customer/agent receives 403. | None. |
+| JWT | PASS | HS256 requires a 32-byte secret; parser rejects expired/tampered tokens. | Valid, expired, tampered, and weak-secret tests pass. |
+| Request validation | PASS | All request bodies use validated DTOs; malformed enum JSON receives 400. | None. |
+| Error leakage | PASS | Shared errors omit traces, SQL text, and internal exception names. | Unknown errors return a generic 500 message. |
+| CORS | PASS | Origins are environment-controlled; credentials are disabled and no wildcard is used. | None. |
+| Dependencies | PASS | Spring Boot 3.5.5 resolves Spring Security 6.5.3. | Version family reviewed during dependency resolution. |
+| Login rate limiting | LIMITATION | Brute-force throttling is not in the supplied assessment scope. | Documented for a production gateway/identity provider. |
+
+The public role field on registration is an explicit assessment convenience; production agent provisioning requires privileged administration.
