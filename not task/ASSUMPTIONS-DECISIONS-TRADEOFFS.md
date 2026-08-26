@@ -140,6 +140,7 @@ than the earlier planning documents archived under `not task/`.
 | Configuration | Secrets and deployment values come from environment variables; `.env.example` contains placeholders/default tuning. | Keeps real secrets out of Git. Compose's development defaults must be replaced before deployment. |
 | Backup vs migrations | Flyway starts a fresh database; `db/backup.sql` is a separate optional restore containing demo data. | Avoids coupling normal startup to a dump while satisfying the backup requirement. |
 | Git history | The complete domain/API implementation precedes pagination/rate limiting, JWT/runtime performance improvements, and post-improvement k6 evidence. Work is prepared on `feature/support-ticketing-api` from `development`. | Matches the supplied feature-branch rules and makes the assessment evolution reviewable. The GitHub remote is configured but intentionally not pushed yet. |
+| Commit convention | Assessment `TASK-*` identifiers are used where they map to functional work; conventional `feat`, `fix`, `test`, `perf`, `docs`, and `chore` prefixes cover supporting work. | The supplied rules refer to a HIS module and Azure task ID, but neither exists in this standalone brief. The user explicitly waived the rules file's 300-line limit; commits were still split by concern. |
 | Archived material | Planning, audits, alternate load test, backup helper/manifest, scored review, and black-box harness live under `not task/`. | Keeps the evaluator-facing root compact without deleting review evidence. |
 
 ## Deliberately Out of Scope
