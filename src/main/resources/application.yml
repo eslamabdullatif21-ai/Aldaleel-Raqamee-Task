@@ -5,6 +5,15 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/support_ticketing}
     username: ${SPRING_DATASOURCE_USERNAME:app}
     password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:16}
+      minimum-idle: ${DB_POOL_MIN_IDLE:16}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT:5000}
+  threads:
+    virtual:
+      enabled: ${VIRTUAL_THREADS_ENABLED:true}
+  main:
+    keep-alive: true
   jpa:
     open-in-view: false
     hibernate:
@@ -21,6 +30,7 @@ app:
   jwt:
     secret: ${JWT_SECRET:}
     expiration: ${JWT_EXPIRATION:PT1H}
+    user-cache-ttl: ${JWT_USER_CACHE_TTL:PT1M}
   rate-limit:
     login:
       max-attempts: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:10}
@@ -28,6 +38,13 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 server:
+  tomcat:
+    max-connections: ${TOMCAT_MAX_CONNECTIONS:12000}
+    accept-count: ${TOMCAT_ACCEPT_COUNT:2000}
+    keep-alive-timeout: ${TOMCAT_KEEP_ALIVE_TIMEOUT:20s}
+    threads:
+      max: ${TOMCAT_MAX_THREADS:300}
+      min-spare: ${TOMCAT_MIN_SPARE_THREADS:30}
   error:
     include-message: never
     include-stacktrace: never
