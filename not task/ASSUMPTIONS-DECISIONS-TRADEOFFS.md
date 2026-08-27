@@ -12,7 +12,7 @@ than the earlier planning documents archived under `not task/`.
 | TASK-005 collision | Both TASK-005 items are implemented and identified as TASK-005 (US-001 validation) and TASK-005 (US-002 assignment). | Preserves traceability despite duplicate numbering in the brief. |
 | Application boundary | One Spring Boot application and one PostgreSQL database. | The stories form one small bounded context. Microservices would introduce networking and distributed consistency without helping a requirement. |
 | Supporting authentication | Registration and login endpoints were added even though they are not named tasks. | Authenticated customer/agent behavior cannot be exercised without identities. This adds only the minimum supporting capability. |
-| Roles | Only `CUSTOMER` and `AGENT`; no administrator role. | No admin workflow was requested. Open agent registration is convenient for assessment review but would require privileged provisioning in production. |
+| Roles | Only `CUSTOMER` and `AGENT`; no administrator role. Public registration is customer-only; the restored backup supplies a demo agent. | No administrator or agent-provisioning workflow was requested. A production deployment would provision agents through an administrator or identity provider. |
 | Added operational protections | Pagination, login throttling, JWT principal caching, optimistic locking, and bounded runtime settings are included. | They make the single instance safer without changing the ticketing domain. Their limits and single-instance implications are documented below. |
 
 ## Ticket and Workflow Rules
@@ -24,7 +24,7 @@ than the earlier planning documents archived under `not task/`.
 | Priorities | `LOW`, `MEDIUM`, `HIGH`, `URGENT`; omitted creation priority becomes `MEDIUM`. | `MEDIUM` is the neutral default. Customers cannot subsequently reprioritize tickets. |
 | Initial ticket state | A ticket always starts `OPEN` and unassigned. The authenticated customer, not request data, becomes the owner. | Prevents forged ownership and keeps assignment/status changes explicit. |
 | Input normalization | Ticket title, description, comment body, registration name, and registration email are trimmed; registration email is lowercased. | Produces consistent stored values. Passwords are intentionally not trimmed because whitespace may be intentional. |
-| Assignment | Any agent may claim or reassign any ticket. Omitting `agentId` self-assigns. Assignment does not change status. | Supports team routing with a compact API. It also means assignment permission is broader than later management permission. |
+| Assignment | An agent may claim an unassigned ticket only for themselves. Once assigned, only the current agent may reassign it to another valid agent. Omitting `agentId` means the actor. Assignment does not change status. | Prevents agents from routing untouched work to someone else or hijacking another agent's ticket, while still supporting explicit handoff by the current owner. |
 | Assigned-agent boundary | Only the currently assigned agent may view, update status/priority, comment, or read history. | Directly follows “tickets assigned to me.” Agents must claim a ticket before working it and lose access immediately after reassignment. |
 | Customer boundary | Customers may view, comment on, and read history for their own tickets only. | Keeps tenant ownership explicit. Another authenticated user receives `403`, while a nonexistent ticket receives `404`. |
 | Customer status actions | The owner may perform `RESOLVED -> CLOSED` or `RESOLVED -> REOPENED`; no other customer status change is allowed. | Lets the customer confirm or reject a resolution without granting general workflow control. |
@@ -66,7 +66,7 @@ than the earlier planning documents archived under `not task/`.
 | Schema authority | `V1__init_schema.sql` creates the schema; Hibernate uses `ddl-auto=validate`. | Startup detects drift rather than silently changing production tables. Schema changes require explicit migrations. |
 | Database backup | `db/backup.sql` is a PostgreSQL 16.9 plain SQL schema-and-data dump. It contains 2 users, 2 tickets, 3 comments, 7 history events, and Flyway history. | Satisfies the SQL backup requirement and gives reviewers demo data. Demo credentials are intentionally non-production. |
 | Time handling | Entity timestamps use `Instant`; Hibernate JDBC timezone is UTC. | Avoids server-local timezone ambiguity. Clients receive ISO-8601 instants. |
-| Concurrency | `Ticket.version` uses optimistic locking. | Prevents silent lost updates without holding long database locks; a concurrent collision may surface as a conflict/error and requires client retry. |
+| Concurrency | `Ticket.version` uses optimistic locking; a collision returns `409 Conflict` with a retry-safe public message. | Prevents silent lost updates without holding long database locks. Clients must reload or retry after a conflicting update. |
 | Fetching | All `ManyToOne` relations are lazy and Open Session in View is disabled. | Prevents accidental N+1/lazy serialization and long-lived persistence contexts; mappings must occur inside service transactions. |
 | Indexes | Unique email; ticket customer; ticket status; agent/status; comment ticket/time; history ticket/time. | Matches login, scoped listing/filtering, and chronological timeline reads, with additional write/index storage cost. |
 | Referential behavior | Foreign keys enforce references; no cascade-delete workflow or ticket/user deletion endpoint exists. | Avoids accidental audit loss. Data-retention/deletion policy is intentionally outside scope. |
@@ -86,7 +86,7 @@ than the earlier planning documents archived under `not task/`.
 | Login rate limit | Fixed window, default 10 login attempts per observed remote address per minute; all attempts, including successful ones, count. `429` includes `Retry-After`. | Small, dependency-free single-instance protection. NAT users share a bucket, process restart clears it, and proxy deployments must provide a trusted client-address strategy. |
 | Authorization split | `@PreAuthorize` handles coarse role rules; `PermissionService` handles ticket ownership/assignment. | Avoids database-heavy SpEL and keeps resource policy readable, at the cost of explicit checks in service methods. |
 | CORS | Explicit environment-controlled origins, only GET/POST/PATCH/OPTIONS and Authorization/Content-Type; credentials disabled. | Avoids wildcard credential exposure. New clients/methods require configuration changes. |
-| Public role registration | Registration accepts `CUSTOMER` or `AGENT`. | Makes the assessment self-contained. Production must gate agent provisioning through administration or an identity provider. |
+| Public registration | Registration accepts `CUSTOMER` only and rejects `AGENT` with `403 Forbidden`. | Prevents privilege self-escalation. The backup provides the assessment's demo agent; production agent provisioning remains outside scope. |
 | Missing auth features | No refresh token, logout blacklist, MFA, password reset, account disable flag, or email verification. | None is required by the epic; adding them would expand the identity domain substantially. |
 
 ## Architecture and Code Structure
@@ -124,13 +124,21 @@ than the earlier planning documents archived under `not task/`.
 
 | Topic | Implemented decision | Reason and tradeoff |
 |---|---|---|
-| Unit-test focus | 55 JUnit 5/Mockito tests emphasize all 25 transition pairs, permission rules, service orchestration, JWT/cache/filter behavior, error mapping, pagination, and throttling. The suite passed both with the host Java 17 compatibility override and in a Temurin Java 21 Maven container. | Risk-weighted coverage provides more value than testing Lombok or trivial repository methods. Service coverage is not uniformly high. |
+| Unit-test focus | 105 JUnit 5/Mockito tests emphasize all 25 transition pairs, permission rules, service orchestration, JWT/cache/filter behavior, error mapping, pagination, and throttling. The suite passed with the host Java 17 compatibility override and is verified in a Temurin Java 21 Maven container. | Risk-weighted coverage provides more value than testing Lombok or trivial repository methods. Service coverage is not uniformly high. |
 | Test database | H2 PostgreSQL mode for lightweight test configuration; Mockito isolates unit logic. | Fast and infrastructure-independent, but it cannot prove every PostgreSQL behavior. |
 | PostgreSQL verification | PostgreSQL 16.9 migrations, Hibernate validation, demo creation, dump, clean restore, restored authentication, and API reads were exercised manually/automatically during review. | Strong local evidence, but not a checked-in Testcontainers integration suite. |
 | Black-box review | A 64-check HTTP harness passed during review and is archived under `not task/review`. | It is useful evidence but not needed in the compact assessment submission; unit tests remain active submission tests. |
 | Coverage | JaCoCo generates a report but does not enforce a global percentage gate. | Avoids gaming aggregate coverage with trivial DTO/entity tests. CI could introduce risk-based package gates later. |
 | Docker build tests | Docker build uses `-DskipTests`; tests are run separately before image creation. | Speeds repeat image builds. CI must preserve the separate test step. |
 | Runtime verification | Docker Engine 29.1.3 and Compose 2.40.3 built and ran the submitted stack in WSL 2. PostgreSQL 16.15 restored the dump, Flyway/Hibernate validated it, the Java 21 application passed all 64 HTTP checks, and the Maven test container passed all 55 tests on Java 21. | Docker Desktop itself was broken on the host, so an isolated Ubuntu WSL Docker Engine was used without deleting existing Docker data. Host Maven tests still use the Java 17 override. |
+
+The latest security-fix verification restored the clean backup with 2 users,
+2 tickets, 3 comments, and 7 history events. All 105 tests passed on Java 17
+and containerized Java 21. Eleven live HTTP checks covered public registration,
+self-claim, forbidden routing and hijacking, permitted handoff, and post-handoff
+access. A second test-only agent was copied from the demo agent inside the
+disposable database; that database, its containers, and its network were removed
+after verification.
 
 ## Delivery and Operational Decisions
 
@@ -139,7 +147,7 @@ than the earlier planning documents archived under `not task/`.
 | Docker | Multi-stage Java 21 image, non-root runtime user, PostgreSQL health dependency, and named volume. | Satisfies the Docker bonus and gives one-command startup. The image is larger/slower to build than distributing a bare JAR. |
 | Configuration | Secrets and deployment values come from environment variables; `.env.example` contains placeholders/default tuning. | Keeps real secrets out of Git. Compose's development defaults must be replaced before deployment. |
 | Backup vs migrations | Flyway starts a fresh database; `db/backup.sql` is a separate optional restore containing demo data. | Avoids coupling normal startup to a dump while satisfying the backup requirement. |
-| Git history | The complete domain/API implementation precedes pagination/rate limiting, JWT/runtime performance improvements, and post-improvement k6 evidence. Work is prepared on `feature/support-ticketing-api` from `development`. | Matches the supplied feature-branch rules and makes the assessment evolution reviewable. The GitHub remote is configured but intentionally not pushed yet. |
+| Git history | The complete domain/API implementation precedes pagination/rate limiting, JWT/runtime performance improvements, and post-improvement k6 evidence. Changes are split into short commits on `main`. | Keeps the assessment evolution reviewable. The configured GitHub remote contains the published history. |
 | Commit convention | Assessment `TASK-*` identifiers are used where they map to functional work; conventional `feat`, `fix`, `test`, `perf`, `docs`, and `chore` prefixes cover supporting work. | The supplied rules refer to a HIS module and Azure task ID, but neither exists in this standalone brief. The user explicitly waived the rules file's 300-line limit; commits were still split by concern. |
 | Archived material | Planning, audits, alternate load test, backup helper/manifest, scored review, and black-box harness live under `not task/`. | Keeps the evaluator-facing root compact without deleting review evidence. |
 
@@ -156,8 +164,7 @@ multi-instance deployment, message queues, CQRS, and event sourcing.
 ## Incomplete or Environment-Limited Items
 
 - All functional tasks TASK-001 through TASK-012 are implemented.
-- GitHub upload is intentionally pending. The supplied remote is configured and
-  the feature branch is prepared locally, but no push was made during preparation.
+- GitHub upload is complete on the configured remote.
 - The standard Docker Desktop installation on the review host was incomplete.
   Runtime verification therefore used an isolated Ubuntu WSL 2 Docker Engine;
   this tests the same Linux images and Compose file without altering old Docker data.

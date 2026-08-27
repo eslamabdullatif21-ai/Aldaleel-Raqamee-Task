@@ -66,12 +66,12 @@ The dump contains 2 users, 2 tickets, 3 comments, and 7 history events.
 mvn test
 ```
 
-The implemented suite has 55 passing tests. It was run both with the host's
+The implemented suite has 105 passing tests. It was run both with the host's
 Java 17 compatibility override and inside a Temurin Java 21 Maven container.
 JaCoCo output is generated at `target/site/jacoco/index.html`; measured line
-coverage is 100% for `TicketStateMachine`, 81% for `PermissionService`, 100% for
-`JwtAuthenticationFilter`, 92% for `JwtUserCache`, 89% for `JwtService`, 88% for
-`LoginRateLimiter`, and 66% for `TicketService`. Dedicated tests also prove that
+coverage is 100% for `TicketStateMachine`, 77% for `PermissionService`, 100% for
+`JwtAuthenticationFilter`, 89% for `JwtUserCache`, 92% for `JwtService`, 88% for
+`LoginRateLimiter`, and 90% for `TicketService`. Dedicated tests also prove that
 the JWT filter verifies once, uses the cache once, excludes password hashes,
 reloads after expiry, and does not query users for invalid tokens. The tests
 prioritize transition, permission, pagination, authentication, and throttling
@@ -127,12 +127,12 @@ All endpoints except registration and login require `Authorization: Bearer <toke
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/auth/register` | Register a customer or agent |
+| POST | `/api/auth/register` | Register a customer account |
 | POST | `/api/auth/login` | Receive a JWT |
 | POST | `/api/tickets` | Create a customer ticket |
 | GET | `/api/tickets` | Paginated, role-scoped ticket list with filters |
 | GET | `/api/tickets/{id}` | View an accessible ticket |
-| PATCH | `/api/tickets/{id}/assign` | Assign or reassign to an agent |
+| PATCH | `/api/tickets/{id}/assign` | Self-claim or reassign an owned assignment |
 | PATCH | `/api/tickets/{id}/status` | Apply a valid status transition |
 | PATCH | `/api/tickets/{id}/priority` | Change priority |
 | POST/GET | `/api/tickets/{id}/comments` | Add/list paginated immutable comments |
@@ -189,9 +189,9 @@ stateDiagram-v2
 The complete project-wide record is [ASSUMPTIONS-DECISIONS-TRADEOFFS.md](<not task/ASSUMPTIONS-DECISIONS-TRADEOFFS.md>). Key choices are:
 
 - Omitted priority defaults to `MEDIUM`; tickets start `OPEN` and unassigned.
-- Any agent may claim/reassign, but only the assigned agent may manage or view the ticket.
+- An agent may self-claim an unassigned ticket; only its current agent may reassign it.
 - The customer may close or reopen their own resolved ticket; all other customer status changes are forbidden.
-- Registration accepts an agent role only to keep the assessment self-contained.
+- Public registration accepts customer accounts only; the backup provides the demo agent.
 - Status, creation, and assignment events form one immutable chronological timeline.
 - JWT user caching and login throttling are deliberately single-instance mechanisms.
 
@@ -199,8 +199,8 @@ The complete project-wide record is [ASSUMPTIONS-DECISIONS-TRADEOFFS.md](<not ta
 
 - Database: PostgreSQL with Flyway and `db/backup.sql`.
 - Docker: multi-stage non-root image plus app/database Compose stack.
-- Unit tests: 55 tests with JaCoCo reporting.
+- Unit tests: 105 tests with JaCoCo reporting.
 
 ## Incomplete / Deviated Requirements
 
-All feature tasks TASK-001 through TASK-012 are implemented. PostgreSQL 16.9 was used to create and independently restore the supplied dump. The submitted Compose stack was also built and run with Docker Engine 29.1.3 and Compose 2.40.3: PostgreSQL 16.15 restored the dump into a confirmed-empty database, Flyway and Hibernate validated it, the application ran as a non-root user on Temurin Java 21.0.12, all 64 black-box API checks passed, and the 55-test Maven suite passed in a separate Java 21 container. The host JDK remains Java 17, so host Maven verification uses `-Djava.version=17`. The GitHub remote is configured, but no push was performed because the repository is being prepared for review first.
+All feature tasks TASK-001 through TASK-012 are implemented. PostgreSQL 16.9 was used to create and independently restore the supplied dump. The submitted Compose stack was also built and run with Docker Engine 29.1.3 and Compose 2.40.3: PostgreSQL 16.15 restored the dump into a confirmed-empty database, Flyway and Hibernate validated it, and the application ran as a non-root user on Temurin Java 21.0.12. The complete 105-test suite passes. The host JDK remains Java 17, so host Maven verification uses `-Djava.version=17`; Java 21 verification uses the containerized build. The repository is published to the configured GitHub remote.
