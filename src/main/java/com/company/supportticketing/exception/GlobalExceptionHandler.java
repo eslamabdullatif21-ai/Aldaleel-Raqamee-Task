@@ -1,19 +1,30 @@
 package com.company.supportticketing.exception;
 
-import com.company.supportticketing.dto.response.*;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
-import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.*;
-import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.HttpRequestMethodNotSupportedException;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
+
+import jakarta.servlet.http.HttpServletRequest;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+
+import com.company.supportticketing.dto.response.ApiErrorResponse;
+import com.company.supportticketing.dto.response.FieldErrorResponse;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,7 +42,7 @@ public class GlobalExceptionHandler {
             String values = String.join(", ", Arrays.stream(format.getTargetType().getEnumConstants())
                     .map(Object::toString).toList());
             return error(HttpStatus.BAD_REQUEST, "Validation failed", request,
-                    java.util.List.of(new FieldErrorResponse(field, "must be one of: " + values)));
+                    List.of(new FieldErrorResponse(field, "must be one of: " + values)));
         }
         return error(HttpStatus.BAD_REQUEST, "Malformed request body or invalid enum value", request, null);
     }
@@ -47,7 +58,7 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> unsupportedMethod(HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
         return error(HttpStatus.METHOD_NOT_ALLOWED, "HTTP method is not supported for this endpoint", request, null);
     }
-    @ExceptionHandler({PermissionDeniedException.class, org.springframework.security.access.AccessDeniedException.class})
+    @ExceptionHandler({PermissionDeniedException.class, AccessDeniedException.class})
     ResponseEntity<ApiErrorResponse> forbidden(Exception ex, HttpServletRequest request) { return error(HttpStatus.FORBIDDEN, ex.getMessage(), request, null); }
     @ExceptionHandler({TicketNotFoundException.class, UserNotFoundException.class})
     ResponseEntity<ApiErrorResponse> notFound(Exception ex, HttpServletRequest request) { return error(HttpStatus.NOT_FOUND, ex.getMessage(), request, null); }
@@ -55,6 +66,15 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> conflict(Exception ex, HttpServletRequest request) {
         String message = ex instanceof DataIntegrityViolationException ? "The request conflicts with existing data" : ex.getMessage();
         return error(HttpStatus.CONFLICT, message, request, null);
+    }
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    ResponseEntity<ApiErrorResponse> optimisticLock(
+            ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+        return error(
+                HttpStatus.CONFLICT,
+                "This ticket was modified by someone else. Please retry your request.",
+                request,
+                null);
     }
     @ExceptionHandler(BadCredentialsException.class)
     ResponseEntity<ApiErrorResponse> unauthorized(Exception ex, HttpServletRequest request) { return error(HttpStatus.UNAUTHORIZED, "Invalid email or password", request, null); }
@@ -66,10 +86,10 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiErrorResponse> unexpected(Exception ex, HttpServletRequest request) { return error(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", request, null); }
-    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String message, HttpServletRequest request, java.util.List<FieldErrorResponse> fields) {
+    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String message, HttpServletRequest request, List<FieldErrorResponse> fields) {
         return ResponseEntity.status(status).body(response(status, message, request, fields));
     }
-    private ApiErrorResponse response(HttpStatus status, String message, HttpServletRequest request, java.util.List<FieldErrorResponse> fields) {
+    private ApiErrorResponse response(HttpStatus status, String message, HttpServletRequest request, List<FieldErrorResponse> fields) {
         return new ApiErrorResponse(Instant.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI(), fields);
     }
     private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
