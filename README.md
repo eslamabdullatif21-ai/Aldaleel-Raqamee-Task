@@ -56,9 +56,10 @@ Demo accounts included in the dump:
 | Role | Email | Password |
 |---|---|---|
 | Customer | `customer@example.com` | `Customer123!` |
-| Agent | `agent@example.com` | `Agent123!` |
+| Agent 1 | `agent@example.com` | `Agent123!` |
+| Agent 2 | `agent2@example.com` | `Agent123!` |
 
-The dump contains 2 users, 2 tickets, 3 comments, and 7 history events.
+The dump contains 3 users (including 2 agents), 2 tickets, 3 comments, and 7 history events.
 
 ## Running Tests
 

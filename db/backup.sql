@@ -182,6 +182,7 @@ c698c692-c5b7-498b-8961-74977d953503	Invoice total is incorrect	The August invoi
 COPY public.users (id, email, password_hash, name, role, created_at) FROM stdin;
 1542aabd-3724-4ae0-9091-447a2c62f82b	customer@example.com	$2a$10$kA8AuudAj5st/8./MBfiaegRRyQzNWTx2eER3QVLai890z3YdacVi	Demo Customer	CUSTOMER	2026-08-25 22:43:34.319057+03
 e6cd6def-7b2b-4bc4-b965-8b1376479e60	agent@example.com	$2a$10$5l8m3rmKsDPlhiGFbyP2oO3olcaLwEUMY9RXokDHxU2Iu72r.v2wu	Demo Agent	AGENT	2026-08-25 22:43:34.428598+03
+33333333-3333-3333-3333-333333333333	agent2@example.com	$2a$10$5l8m3rmKsDPlhiGFbyP2oO3olcaLwEUMY9RXokDHxU2Iu72r.v2wu	Demo Agent 2	AGENT	2026-08-25 22:43:34.528598+03
 \.
 
 
