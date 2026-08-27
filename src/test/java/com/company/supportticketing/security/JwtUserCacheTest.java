@@ -1,18 +1,26 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.domain.entity.AppUser;
-import com.company.supportticketing.domain.enums.UserRole;
-import com.company.supportticketing.repository.UserRepository;
-import org.junit.jupiter.api.Test;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
+import com.company.supportticketing.domain.entity.AppUser;
+import com.company.supportticketing.domain.enums.UserRole;
+import com.company.supportticketing.repository.UserRepository;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class JwtUserCacheTest {
     private final UserRepository users = mock(UserRepository.class);

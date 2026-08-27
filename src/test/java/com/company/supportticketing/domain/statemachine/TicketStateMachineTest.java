@@ -1,13 +1,20 @@
 package com.company.supportticketing.domain.statemachine;
 
-import com.company.supportticketing.domain.enums.TicketStatus;
-import com.company.supportticketing.exception.InvalidTransitionException;
-import org.junit.jupiter.api.*;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import java.util.*;
-import java.util.stream.Stream;
-import static org.junit.jupiter.api.Assertions.*;
+
+import com.company.supportticketing.domain.enums.TicketStatus;
+import com.company.supportticketing.exception.InvalidTransitionException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TicketStateMachineTest {
     private final TicketStateMachine machine = new TicketStateMachine();

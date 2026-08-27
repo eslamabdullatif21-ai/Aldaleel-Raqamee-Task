@@ -1,11 +1,18 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.domain.entity.*;
-import com.company.supportticketing.domain.enums.*;
-import com.company.supportticketing.exception.PermissionDeniedException;
-import org.junit.jupiter.api.*;
 import java.util.UUID;
-import static org.junit.jupiter.api.Assertions.*;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import com.company.supportticketing.domain.entity.AppUser;
+import com.company.supportticketing.domain.entity.Ticket;
+import com.company.supportticketing.domain.enums.TicketStatus;
+import com.company.supportticketing.domain.enums.UserRole;
+import com.company.supportticketing.exception.PermissionDeniedException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PermissionServiceTest {
     private final PermissionService permissions = new PermissionService();

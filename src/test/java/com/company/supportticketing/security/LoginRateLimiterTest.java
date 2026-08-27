@@ -1,14 +1,17 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.exception.RateLimitExceededException;
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import com.company.supportticketing.exception.RateLimitExceededException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class LoginRateLimiterTest {
     @Test void blocksAttemptsBeyondConfiguredLimitAndProvidesRetryDelay() {

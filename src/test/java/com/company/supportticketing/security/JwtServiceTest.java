@@ -1,12 +1,18 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.domain.entity.AppUser;
-import com.company.supportticketing.domain.enums.UserRole;
-import io.jsonwebtoken.JwtException;
-import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.UUID;
-import static org.junit.jupiter.api.Assertions.*;
+
+import io.jsonwebtoken.JwtException;
+import org.junit.jupiter.api.Test;
+
+import com.company.supportticketing.domain.entity.AppUser;
+import com.company.supportticketing.domain.enums.UserRole;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtServiceTest {
     private static final String SECRET = "a-secure-test-secret-containing-more-than-32-bytes";

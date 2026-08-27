@@ -1,7 +1,8 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.domain.entity.AppUser;
-import com.company.supportticketing.domain.enums.UserRole;
+import java.time.Instant;
+import java.util.UUID;
+
 import io.jsonwebtoken.MalformedJwtException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -10,11 +11,16 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.Instant;
-import java.util.UUID;
+import com.company.supportticketing.domain.entity.AppUser;
+import com.company.supportticketing.domain.enums.UserRole;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class JwtAuthenticationFilterTest {
     private final JwtService jwtService = mock(JwtService.class);
