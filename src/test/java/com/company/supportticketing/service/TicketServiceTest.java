@@ -178,7 +178,7 @@ class TicketServiceTest {
     void assign_throwsUserNotFound_whenTargetUserNotFound() {
         UUID ticketId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
-        Ticket ticket = Ticket.builder().id(ticketId).customer(customer).build();
+        Ticket ticket = Ticket.builder().id(ticketId).customer(customer).assignedAgent(agent).build();
         when(tickets.findById(ticketId)).thenReturn(Optional.of(ticket));
         when(users.findById(targetId)).thenReturn(Optional.empty());
 
@@ -188,7 +188,7 @@ class TicketServiceTest {
     @Test
     void assign_throwsPermissionDenied_whenTargetUserIsCustomer() {
         UUID ticketId = UUID.randomUUID();
-        Ticket ticket = Ticket.builder().id(ticketId).customer(customer).build();
+        Ticket ticket = Ticket.builder().id(ticketId).customer(customer).assignedAgent(agent).build();
         when(tickets.findById(ticketId)).thenReturn(Optional.of(ticket));
         when(users.findById(customer.getId())).thenReturn(Optional.of(customer));
 
@@ -199,6 +199,30 @@ class TicketServiceTest {
     void assign_throwsPermissionDenied_whenActorIsCustomer() {
         UUID ticketId = UUID.randomUUID();
         assertThrows(PermissionDeniedException.class, () -> service.assign(customer, ticketId, new AssignTicketRequest(null)));
+    }
+
+    @Test
+    void assign_rejectsAssigningUnassignedTicketToAnotherAgent() {
+        Ticket ticket = Ticket.builder().id(UUID.randomUUID()).customer(customer).build();
+        when(tickets.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+
+        assertThrows(
+                PermissionDeniedException.class,
+                () -> service.assign(agent, ticket.getId(), new AssignTicketRequest(otherAgent.getId())));
+    }
+
+    @Test
+    void assign_rejectsReassignmentByUnrelatedAgent() {
+        Ticket ticket = Ticket.builder()
+                .id(UUID.randomUUID())
+                .customer(customer)
+                .assignedAgent(agent)
+                .build();
+        when(tickets.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+
+        assertThrows(
+                PermissionDeniedException.class,
+                () -> service.assign(otherAgent, ticket.getId(), new AssignTicketRequest(null)));
     }
 
     @Test

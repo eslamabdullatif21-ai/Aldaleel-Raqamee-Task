@@ -101,6 +101,8 @@ public class TicketService {
     public TicketResponse assign(AppUser actor, UUID id, AssignTicketRequest request) {
         permissions.assertCanAssign(actor);
         Ticket ticket = requireTicket(id);
+        UUID targetAgentId = request.agentId() == null ? actor.getId() : request.agentId();
+        permissions.assertCanRouteAssignment(actor, ticket, targetAgentId);
         AppUser agent = request.agentId() == null
                 ? actor
                 : users.findById(request.agentId())

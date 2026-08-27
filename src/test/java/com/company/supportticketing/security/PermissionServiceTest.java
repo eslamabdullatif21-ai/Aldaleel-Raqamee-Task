@@ -31,9 +31,25 @@ class PermissionServiceTest {
         assertThrows(PermissionDeniedException.class, () -> permissions.assertCanView(otherCustomer, ticket));
         assertThrows(PermissionDeniedException.class, () -> permissions.assertCanView(otherAgent, ticket));
     }
-    @Test void anyAgentCanAssignButCustomerCannot() {
+    @Test void onlyAgentsPassAssignmentRoleCheck() {
         assertDoesNotThrow(() -> permissions.assertCanAssign(otherAgent));
         assertThrows(PermissionDeniedException.class, () -> permissions.assertCanAssign(customer));
+    }
+    @Test void agentCanSelfClaimUnassignedTicket() {
+        ticket.setAssignedAgent(null);
+        assertDoesNotThrow(() -> permissions.assertCanRouteAssignment(agent, ticket, agent.getId()));
+    }
+    @Test void agentCannotAssignUnassignedTicketToAnotherAgent() {
+        ticket.setAssignedAgent(null);
+        assertThrows(
+                PermissionDeniedException.class,
+                () -> permissions.assertCanRouteAssignment(agent, ticket, otherAgent.getId()));
+    }
+    @Test void assignedAgentCanReassignTicketButUnrelatedAgentCannot() {
+        assertDoesNotThrow(() -> permissions.assertCanRouteAssignment(agent, ticket, otherAgent.getId()));
+        assertThrows(
+                PermissionDeniedException.class,
+                () -> permissions.assertCanRouteAssignment(otherAgent, ticket, otherAgent.getId()));
     }
     @Test void onlyAssignedAgentCanUpdatePriority() {
         assertDoesNotThrow(() -> permissions.assertCanUpdatePriority(agent, ticket));

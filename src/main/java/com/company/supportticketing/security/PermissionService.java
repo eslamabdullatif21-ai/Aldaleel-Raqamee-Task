@@ -1,6 +1,7 @@
 package com.company.supportticketing.security;
 
 import java.util.Objects;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
@@ -23,6 +24,14 @@ public class PermissionService {
     public void assertCanAssign(AppUser actor) {
         if (actor.getRole() != UserRole.AGENT) {
             deny("Only support agents may assign tickets");
+        }
+    }
+
+    public void assertCanRouteAssignment(AppUser actor, Ticket ticket, UUID targetAgentId) {
+        boolean selfClaim = ticket.getAssignedAgent() == null
+                && Objects.equals(actor.getId(), targetAgentId);
+        if (!selfClaim && !isAssignedAgent(actor, ticket)) {
+            deny("Agents may only claim unassigned tickets for themselves or reassign tickets assigned to them");
         }
     }
 
