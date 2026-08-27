@@ -8,6 +8,10 @@ spring:
     password:
   flyway:
     enabled: true
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data.sql
   jpa:
     hibernate:
       ddl-auto: validate
