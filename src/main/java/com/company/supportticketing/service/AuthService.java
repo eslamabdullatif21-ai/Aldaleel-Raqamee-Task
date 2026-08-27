@@ -11,11 +11,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.company.supportticketing.domain.entity.AppUser;
+import com.company.supportticketing.domain.enums.UserRole;
 import com.company.supportticketing.dto.request.LoginRequest;
 import com.company.supportticketing.dto.request.RegisterRequest;
 import com.company.supportticketing.dto.response.AuthResponse;
 import com.company.supportticketing.dto.response.UserResponse;
 import com.company.supportticketing.exception.DuplicateEmailException;
+import com.company.supportticketing.exception.PermissionDeniedException;
 import com.company.supportticketing.repository.UserRepository;
 import com.company.supportticketing.security.AppUserAdapter;
 import com.company.supportticketing.security.JwtService;
@@ -30,6 +32,10 @@ public class AuthService {
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
+        if (request.role() != UserRole.CUSTOMER) {
+            throw new PermissionDeniedException("Public registration is limited to customer accounts");
+        }
+
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         if (users.existsByEmailIgnoreCase(email)) {
             throw new DuplicateEmailException();
@@ -38,7 +44,7 @@ public class AuthService {
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .name(request.name().trim())
-                .role(request.role())
+                .role(UserRole.CUSTOMER)
                 .build());
         return new UserResponse(
                 user.getId(),

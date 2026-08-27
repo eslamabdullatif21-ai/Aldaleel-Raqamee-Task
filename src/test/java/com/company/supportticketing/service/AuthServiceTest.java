@@ -22,6 +22,7 @@ import com.company.supportticketing.dto.request.RegisterRequest;
 import com.company.supportticketing.dto.response.AuthResponse;
 import com.company.supportticketing.dto.response.UserResponse;
 import com.company.supportticketing.exception.DuplicateEmailException;
+import com.company.supportticketing.exception.PermissionDeniedException;
 import com.company.supportticketing.repository.UserRepository;
 import com.company.supportticketing.security.AppUserAdapter;
 import com.company.supportticketing.security.JwtService;
@@ -81,6 +82,21 @@ class AuthServiceTest {
         when(users.existsByEmailIgnoreCase("existing@example.com")).thenReturn(true);
 
         assertThrows(DuplicateEmailException.class, () -> authService.register(request));
+    }
+
+    @Test
+    void register_rejectsPublicAgentRegistration() {
+        RegisterRequest request = new RegisterRequest(
+                "agent@example.com",
+                "Secret123!",
+                "Agent",
+                UserRole.AGENT);
+
+        PermissionDeniedException exception = assertThrows(
+                PermissionDeniedException.class,
+                () -> authService.register(request));
+
+        assertEquals("Public registration is limited to customer accounts", exception.getMessage());
     }
 
     @Test
