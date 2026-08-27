@@ -20,14 +20,13 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import com.company.supportticketing.domain.enums.HistoryEventType;
 import com.company.supportticketing.domain.enums.TicketStatus;
 
 @Entity
 @Table(name = "status_history", indexes = @Index(name = "idx_history_ticket_changed", columnList = "ticket_id,changed_at"))
-@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
+@Getter @Builder @NoArgsConstructor @AllArgsConstructor
 public class StatusHistory {
     @Id @GeneratedValue(strategy = GenerationType.UUID) private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "ticket_id", nullable = false) private Ticket ticket;

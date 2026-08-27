@@ -4,23 +4,40 @@ A Spring Boot REST API for creating, assigning, and managing support tickets, wi
 
 ## Tech Stack
 
-- Java 21 and Spring Boot 3.5.5 (Web, Data JPA, Security, Validation)
+- Java 21 and Spring Boot 3.5.5 (Web, Data JPA, Security, Validation, Actuator)
 - PostgreSQL 16 and Flyway migrations
 - HMAC-signed JWT, a bounded principal cache, and BCrypt password hashing
-- JUnit 5, Mockito, H2 test profile, and JaCoCo
+- JUnit 5, Mockito, H2, Testcontainers PostgreSQL, and JaCoCo
 - Docker and Docker Compose
 
 ## Quick Start (Docker - recommended)
 
+macOS/Linux:
+
 ```bash
-git clone <repository-url>
-cd support-ticketing
-copy .env.example .env   # Windows; use: cp .env.example .env on macOS/Linux
-# Replace the example secrets in .env
-docker compose up --build
+git clone https://github.com/eslamabdullatif21-ai/Aldaleel-Raqamee-Task.git
+cd Aldaleel-Raqamee-Task
+cp .env.example .env
+# Edit .env and replace DB_PASSWORD and JWT_SECRET.
+docker compose up --build --wait
 ```
 
-The API is available at `http://localhost:8080`. Flyway creates the schema automatically. Docker image builds skip tests because the verified test phase is separate.
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/eslamabdullatif21-ai/Aldaleel-Raqamee-Task.git
+Set-Location Aldaleel-Raqamee-Task
+Copy-Item .env.example .env
+notepad .env
+# Replace DB_PASSWORD and JWT_SECRET, save the file, then run:
+docker compose up --build --wait
+```
+
+The API is available at `http://localhost:8080`; health is available at
+`http://localhost:8080/actuator/health`. Compose refuses to start when either
+required secret is missing. PostgreSQL is intentionally available only to the
+internal Compose network. Flyway creates the schema automatically. Docker image
+builds skip tests because the verified test phase is separate.
 
 ## Quick Start (local)
 
@@ -47,13 +64,21 @@ PowerShell uses `$env:VARIABLE_NAME='value'` instead of `export`.
 
 A PostgreSQL 16.9 schema-and-data dump generated with `pg_dump` is included at `db/backup.sql`. It contains the Flyway schema history and demo data. Its verified SHA-256 is `49C7490576A3F9707D68CEF67CD92DB6D7FBCAE0FA2D8712701F58E1EB4F5BEA`.
 
+> **Destructive restore warning:** `db/backup.sql` starts with `DROP` statements.
+> Restoring it replaces the application tables and their data. Use a new or
+> intentionally disposable database, and back up any data you need first.
+
 ```bash
 docker compose up -d --wait postgres
+docker compose stop app
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d support_ticketing < db/backup.sql
-docker compose up -d --build app
+docker compose up -d --build --wait app
 ```
 
-When running from PowerShell, use `cmd /c "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d support_ticketing < db\backup.sql"` for the restore command because PowerShell does not support Bash-style input redirection.
+When running from PowerShell, use
+`cmd /c "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d support_ticketing < db\backup.sql"`
+for the restore command because PowerShell does not support Bash-style input
+redirection.
 
 Demo accounts included in the dump:
 
@@ -71,16 +96,44 @@ The dump contains 3 users (including 2 agents), 2 tickets, 3 comments, and 7 his
 mvn test
 ```
 
-The implemented suite has 105 passing tests. It was run both with the host's
-Java 17 compatibility override and inside a Temurin Java 21 Maven container.
-JaCoCo output is generated at `target/site/jacoco/index.html`; measured line
-coverage is 100% for `TicketStateMachine`, 77% for `PermissionService`, 100% for
-`JwtAuthenticationFilter`, 89% for `JwtUserCache`, 92% for `JwtService`, 88% for
-`LoginRateLimiter`, and 90% for `TicketService`. Dedicated tests also prove that
-the JWT filter verifies once, uses the cache once, excludes password hashes,
-reloads after expiry, and does not query users for invalid tokens. The tests
-prioritize transition, permission, pagination, authentication, and throttling
-rules over trivial persistence plumbing.
+The unit suite has 109 tests. Mockito is configured as a Java agent, so the suite
+runs in an ordinary Java 21 Maven container without privileged mode or extra
+Linux capabilities:
+
+```bash
+docker run --rm -v "$PWD:/workspace" -w /workspace \
+  maven:3.9.9-eclipse-temurin-21-alpine mvn test
+```
+
+Windows PowerShell uses the same command with `${PWD}`:
+
+```powershell
+docker run --rm -v "${PWD}:/workspace" -w /workspace `
+  maven:3.9.9-eclipse-temurin-21-alpine mvn test
+```
+
+JaCoCo output is generated at `target/site/jacoco/index.html`. The suite focuses
+on transitions, permissions, service orchestration, pagination, authentication,
+JWT caching, safe errors, allowed sorting, and throttling.
+
+PostgreSQL integration tests use Testcontainers and run separately so the unit
+suite remains fast. Docker must be running:
+
+```bash
+mvn verify -Pintegration
+```
+
+Docker Engine 29 and later may reject docker-java's legacy discovery request.
+If the test reports `client version 1.32 is too old`, use the server's minimum
+API version (the CI workflow detects this automatically):
+
+```bash
+mvn verify -Pintegration -Dapi.version=1.44
+```
+
+The integration profile proves that Flyway and Hibernate validate a clean
+PostgreSQL 16 database and that ticket creation, assignment, permissions,
+valid/invalid transitions, and history writes behave atomically on PostgreSQL.
 
 For the retained aggressive k6 boundary test, start the API and run:
 
@@ -128,14 +181,15 @@ older builds do not contain the required user ID claim and require one re-login.
 
 ## API Documentation
 
-All endpoints except registration and login require `Authorization: Bearer <token>`.
+All endpoints except registration, login, and `/actuator/health` require
+`Authorization: Bearer <token>`.
 
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/auth/register` | Register a customer account |
 | POST | `/api/auth/login` | Receive a JWT |
 | POST | `/api/tickets` | Create a customer ticket |
-| GET | `/api/tickets` | Paginated, role-scoped ticket list with filters |
+| GET | `/api/tickets` | Paginated, role-scoped list with filters and allow-listed sorting |
 | GET | `/api/tickets/{id}` | View an accessible ticket |
 | PATCH | `/api/tickets/{id}/assign` | Self-claim or reassign an owned assignment |
 | PATCH | `/api/tickets/{id}/status` | Apply a valid status transition |
@@ -187,7 +241,7 @@ stateDiagram-v2
 | TASK-009 Permissions | `security/PermissionService.java`, method security |
 | TASK-010 Allowed transitions | `domain/statemachine/TicketStateMachine.java` |
 | TASK-011 Invalid-transition prevention | `TicketStateMachine#validateTransition`, HTTP 409 handler |
-| TASK-012 Status history | `domain/entity/StatusHistory.java`, `TicketService#history` |
+| TASK-012 Status history | `domain/entity/StatusHistory.java`, `StatusHistoryAppender`, `TicketService#history` |
 
 ## Assumptions, Decisions, and Tradeoffs
 
@@ -204,8 +258,12 @@ The complete project-wide record is [ASSUMPTIONS-DECISIONS-TRADEOFFS.md](<not ta
 
 - Database: PostgreSQL with Flyway and `db/backup.sql`.
 - Docker: multi-stage non-root image plus app/database Compose stack.
-- Unit tests: 105 tests with JaCoCo reporting.
+- Tests: 109 unit tests, PostgreSQL Testcontainers integration tests, JaCoCo reporting, and GitHub Actions CI.
 
-## Incomplete / Deviated Requirements
+## Completion Status
 
-All feature tasks TASK-001 through TASK-012 are implemented. PostgreSQL 16.9 was used to create and independently restore the supplied dump. The submitted Compose stack was also built and run with Docker Engine 29.1.3 and Compose 2.40.3: PostgreSQL 16.15 restored the dump into a confirmed-empty database, Flyway and Hibernate validated it, and the application ran as a non-root user on Temurin Java 21.0.12. The complete 105-test suite passes. The host JDK remains Java 17, so host Maven verification uses `-Djava.version=17`; Java 21 verification uses the containerized build. The repository is published to the configured GitHub remote.
+All feature tasks TASK-001 through TASK-012 are implemented. The repository
+contains reproducible Java 21 unit and PostgreSQL integration test commands, a
+multi-stage non-root Docker image, a hardened Compose stack with health checks,
+and a PostgreSQL 16.9 dump with documented credentials and checksum. The dump is
+verified with a clean `psql -v ON_ERROR_STOP=1` restore before release.

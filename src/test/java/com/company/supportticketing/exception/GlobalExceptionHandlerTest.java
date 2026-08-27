@@ -20,6 +20,7 @@ import com.company.supportticketing.domain.enums.TicketStatus;
 import com.company.supportticketing.dto.response.ApiErrorResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -139,12 +140,30 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void invalidSort_returns400_withAllowedProperties() {
+        InvalidSortPropertyException exception = new InvalidSortPropertyException(
+                "customer.passwordHash",
+                java.util.Set.of("createdAt", "updatedAt"));
+
+        ResponseEntity<ApiErrorResponse> response = handler.invalidSort(exception, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(400, response.getBody().status());
+        assertEquals("/api/tickets", response.getBody().path());
+        assertFalse(response.getBody().message().isBlank());
+    }
+
+    @Test
     void unexpected_returns500_forGeneralException() {
-        ResponseEntity<ApiErrorResponse> response = handler.unexpected(new RuntimeException("Crash"), request);
+        ResponseEntity<ApiErrorResponse> response = handler.unexpected(
+                new RuntimeException("sensitive-internal-detail"),
+                request);
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals(500, response.getBody().status());
         assertEquals("An unexpected error occurred", response.getBody().message());
+        assertFalse(response.getBody().message().contains("sensitive-internal-detail"));
         assertNull(response.getBody().fieldErrors());
     }
 }

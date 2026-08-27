@@ -8,7 +8,7 @@ than the earlier planning documents archived under `not task/`.
 
 | Topic | Implemented decision | Reason and tradeoff |
 |---|---|---|
-| Framework | Java 21 with Spring Boot 3.5.5; no alternative application framework. | Required by the assessment. The host JDK is Java 17, so host tests use `-Djava.version=17`; the built container was verified on Temurin Java 21.0.12. |
+| Framework | Java 21 with Spring Boot 3.5.5; no alternative application framework. | Required by the assessment. Unit and integration verification use Java 21. |
 | TASK-005 collision | Both TASK-005 items are implemented and identified as TASK-005 (US-001 validation) and TASK-005 (US-002 assignment). | Preserves traceability despite duplicate numbering in the brief. |
 | Application boundary | One Spring Boot application and one PostgreSQL database. | The stories form one small bounded context. Microservices would introduce networking and distributed consistency without helping a requirement. |
 | Supporting authentication | Registration and login endpoints were added even though they are not named tasks. | Authenticated customer/agent behavior cannot be exercised without identities. This adds only the minimum supporting capability. |
@@ -42,7 +42,7 @@ than the earlier planning documents archived under `not task/`.
 | Unified timeline | Creation/status and assignment events share `status_history`, distinguished by `STATUS_CHANGE` and `ASSIGNMENT`. | One endpoint returns the complete operational timeline. Event-specific columns are necessarily nullable. |
 | Creation event | Creation records `fromStatus=null`, `toStatus=OPEN`, with note `Ticket created`. | Makes the beginning of the lifecycle visible without inventing a pre-creation status. |
 | Assignment event | Records previous/new agent IDs and does not pretend assignment is a status transition. | Preserves accurate semantics while satisfying assignment auditability. |
-| Append-only behavior | No update/delete repository API or HTTP endpoint exists for history. | Supports TASK-012 audit integrity. Database administrators can still alter data; cryptographic/tamper-evident auditing was not requested. |
+| Append-only behavior | A dedicated `StatusHistoryAppender` uses `EntityManager.persist`; the query repository exposes no save/update/delete operations and no mutation HTTP endpoint exists. | Supports TASK-012 audit integrity. Database administrators can still alter data; cryptographic/tamper-evident auditing was not requested. |
 | Atomicity | Ticket mutations and their associated history insert use the same transaction. | Prevents a committed status/assignment change without its audit event. |
 
 ## API and Validation
@@ -124,16 +124,16 @@ than the earlier planning documents archived under `not task/`.
 
 | Topic | Implemented decision | Reason and tradeoff |
 |---|---|---|
-| Unit-test focus | 105 JUnit 5/Mockito tests emphasize all 25 transition pairs, permission rules, service orchestration, JWT/cache/filter behavior, error mapping, pagination, and throttling. The suite passed with the host Java 17 compatibility override and is verified in a Temurin Java 21 Maven container. | Risk-weighted coverage provides more value than testing Lombok or trivial repository methods. Service coverage is not uniformly high. |
-| Test database | H2 PostgreSQL mode for lightweight test configuration; Mockito isolates unit logic. | Fast and infrastructure-independent, but it cannot prove every PostgreSQL behavior. |
-| PostgreSQL verification | PostgreSQL 16.9 migrations, Hibernate validation, demo creation, dump, clean restore, restored authentication, and API reads were exercised manually/automatically during review. | Strong local evidence, but not a checked-in Testcontainers integration suite. |
+| Unit-test focus | 109 JUnit 5/Mockito tests emphasize all 25 transition pairs, permission rules, service orchestration, JWT/cache/filter behavior, safe errors, allowed sorting, pagination, and throttling. Mockito runs as a declared Java agent on Java 21. | Risk-weighted coverage provides more value than testing Lombok or trivial repository methods. |
+| Test database | H2 PostgreSQL mode keeps unit tests fast; a separate Testcontainers profile exercises PostgreSQL 16. | Unit tests remain infrastructure-independent while integration tests prove real migration and transaction behavior. |
+| PostgreSQL verification | Checked-in Testcontainers tests cover Flyway, Hibernate validation, creation/history atomicity, permissions, and valid/invalid transitions. The supplied dump is also restored independently with `ON_ERROR_STOP=1`. | Combines repeatable automated persistence coverage with artifact-level backup verification. |
 | Black-box review | A 64-check HTTP harness passed during review and is archived under `not task/review`. | It is useful evidence but not needed in the compact assessment submission; unit tests remain active submission tests. |
 | Coverage | JaCoCo generates a report but does not enforce a global percentage gate. | Avoids gaming aggregate coverage with trivial DTO/entity tests. CI could introduce risk-based package gates later. |
 | Docker build tests | Docker build uses `-DskipTests`; tests are run separately before image creation. | Speeds repeat image builds. CI must preserve the separate test step. |
-| Runtime verification | Docker Engine 29.1.3 and Compose 2.40.3 built and ran the submitted stack in WSL 2. PostgreSQL 16.15 restored the dump, Flyway/Hibernate validated it, the Java 21 application passed all 64 HTTP checks, and the Maven test container passed all 55 tests on Java 21. | Docker Desktop itself was broken on the host, so an isolated Ubuntu WSL Docker Engine was used without deleting existing Docker data. Host Maven tests still use the Java 17 override. |
+| Runtime verification | Reproducible README commands cover Java 21 unit tests, the PostgreSQL integration profile, Compose health checks, clean backup restore, and live HTTP verification. | Avoids depending on one review machine's host configuration. |
 
 The latest seeded-agent verification restored the clean backup with 3 users
-(1 customer and 2 agents), 2 tickets, 3 comments, and 7 history events. All 105
+(1 customer and 2 agents), 2 tickets, 3 comments, and 7 history events. All 109
 unit tests passed, and the complete 64-check live HTTP harness passed against the
 Java 21 Compose application. The harness asserts that public agent registration
 is forbidden, authenticates both restored agents, and exercises self-claim,
@@ -144,7 +144,7 @@ cross-agent denial, status/priority management, and current-owner handoff.
 | Topic | Implemented decision | Reason and tradeoff |
 |---|---|---|
 | Docker | Multi-stage Java 21 image, non-root runtime user, PostgreSQL health dependency, and named volume. | Satisfies the Docker bonus and gives one-command startup. The image is larger/slower to build than distributing a bare JAR. |
-| Configuration | Secrets and deployment values come from environment variables; `.env.example` contains placeholders/default tuning. | Keeps real secrets out of Git. Compose's development defaults must be replaced before deployment. |
+| Configuration | Secrets and deployment values come from environment variables; `.env.example` contains placeholders/default tuning and Compose fails fast when secrets are absent. | Keeps real secrets out of Git and prevents accidental startup with committed fallback credentials. |
 | Backup vs migrations | Flyway starts a fresh database; `db/backup.sql` is a separate optional restore containing demo data. | Avoids coupling normal startup to a dump while satisfying the backup requirement. |
 | Git history | The complete domain/API implementation precedes pagination/rate limiting, JWT/runtime performance improvements, and post-improvement k6 evidence. Changes are split into short commits on `main`. | Keeps the assessment evolution reviewable. The configured GitHub remote contains the published history. |
 | Commit convention | Assessment `TASK-*` identifiers are used where they map to functional work; conventional `feat`, `fix`, `test`, `perf`, `docs`, and `chore` prefixes cover supporting work. | The supplied rules refer to a HIS module and Azure task ID, but neither exists in this standalone brief. The user explicitly waived the rules file's 300-line limit; commits were still split by concern. |
@@ -164,9 +164,5 @@ multi-instance deployment, message queues, CQRS, and event sourcing.
 
 - All functional tasks TASK-001 through TASK-012 are implemented.
 - GitHub upload is complete on the configured remote.
-- The standard Docker Desktop installation on the review host was incomplete.
-  Runtime verification therefore used an isolated Ubuntu WSL 2 Docker Engine;
-  this tests the same Linux images and Compose file without altering old Docker data.
-- A repeatable PostgreSQL Testcontainers suite is not included. PostgreSQL 16.9
-  was nevertheless migrated, backed up, restored, queried, and load-tested
-  directly during review.
+- No functional requirement is incomplete. Operational mechanisms intentionally
+  remain single-instance where explicitly documented.

@@ -36,11 +36,13 @@ import com.company.supportticketing.dto.request.UpdateStatusRequest;
 import com.company.supportticketing.dto.response.CommentResponse;
 import com.company.supportticketing.dto.response.TicketResponse;
 import com.company.supportticketing.exception.InvalidTransitionException;
+import com.company.supportticketing.exception.InvalidSortPropertyException;
 import com.company.supportticketing.exception.PermissionDeniedException;
 import com.company.supportticketing.exception.TicketNotFoundException;
 import com.company.supportticketing.exception.UserNotFoundException;
 import com.company.supportticketing.mapper.TicketMapper;
 import com.company.supportticketing.repository.CommentRepository;
+import com.company.supportticketing.repository.StatusHistoryAppender;
 import com.company.supportticketing.repository.StatusHistoryRepository;
 import com.company.supportticketing.repository.TicketRepository;
 import com.company.supportticketing.repository.UserRepository;
@@ -53,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -63,13 +66,22 @@ class TicketServiceTest {
     @Mock UserRepository users;
     @Mock CommentRepository comments;
     @Mock StatusHistoryRepository history;
+    @Mock StatusHistoryAppender historyAppender;
 
     private TicketService service;
     private AppUser customer, otherCustomer, agent, otherAgent;
 
     @BeforeEach
     void setUp() {
-        service = new TicketService(tickets, users, comments, history, new TicketMapper(), new TicketStateMachine(), new PermissionService());
+        service = new TicketService(
+                tickets,
+                users,
+                comments,
+                history,
+                historyAppender,
+                new TicketMapper(),
+                new TicketStateMachine(),
+                new PermissionService());
         customer = AppUser.builder().id(UUID.randomUUID()).role(UserRole.CUSTOMER).name("Customer").build();
         otherCustomer = AppUser.builder().id(UUID.randomUUID()).role(UserRole.CUSTOMER).name("Other Customer").build();
         agent = AppUser.builder().id(UUID.randomUUID()).role(UserRole.AGENT).name("Agent").build();
@@ -86,7 +98,7 @@ class TicketServiceTest {
         assertEquals("Details", result.description());
 
         ArgumentCaptor<StatusHistory> event = ArgumentCaptor.forClass(StatusHistory.class);
-        verify(history).save(event.capture());
+        verify(historyAppender).append(event.capture());
         assertNull(event.getValue().getFromStatus());
         assertEquals(TicketStatus.OPEN, event.getValue().getToStatus());
         assertEquals(HistoryEventType.STATUS_CHANGE, event.getValue().getEventType());
@@ -144,6 +156,21 @@ class TicketServiceTest {
     }
 
     @Test
+    void list_rejectsUnsupportedSortProperty_beforeQueryingDatabase() {
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("customer.passwordHash"));
+
+        InvalidSortPropertyException exception = assertThrows(
+                InvalidSortPropertyException.class,
+                () -> service.list(customer, null, null, null, pageable));
+
+        assertEquals(
+                "Unsupported sort property 'customer.passwordHash'. Allowed properties: "
+                        + "createdAt, updatedAt, status, priority, category",
+                exception.getMessage());
+        verify(tickets, never()).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
     void assign_selfAssigns_whenAgentIdNull() {
         Ticket ticket = Ticket.builder().id(UUID.randomUUID()).customer(customer).status(TicketStatus.OPEN).priority(TicketPriority.MEDIUM).build();
         when(tickets.findById(ticket.getId())).thenReturn(Optional.of(ticket));
@@ -153,7 +180,7 @@ class TicketServiceTest {
         assertEquals(TicketStatus.OPEN, response.status());
         assertEquals(agent.getId(), response.assignedAgentId());
         ArgumentCaptor<StatusHistory> event = ArgumentCaptor.forClass(StatusHistory.class);
-        verify(history).save(event.capture());
+        verify(historyAppender).append(event.capture());
         assertEquals(HistoryEventType.ASSIGNMENT, event.getValue().getEventType());
         assertNull(event.getValue().getFromAgentId());
         assertEquals(agent.getId(), event.getValue().getToAgentId());
@@ -169,7 +196,7 @@ class TicketServiceTest {
 
         assertEquals(otherAgent.getId(), response.assignedAgentId());
         ArgumentCaptor<StatusHistory> event = ArgumentCaptor.forClass(StatusHistory.class);
-        verify(history).save(event.capture());
+        verify(historyAppender).append(event.capture());
         assertEquals(agent.getId(), event.getValue().getFromAgentId());
         assertEquals(otherAgent.getId(), event.getValue().getToAgentId());
     }
@@ -233,7 +260,7 @@ class TicketServiceTest {
         service.updateStatus(agent, ticket.getId(), new UpdateStatusRequest(TicketStatus.IN_PROGRESS, "Starting"));
 
         ArgumentCaptor<StatusHistory> event = ArgumentCaptor.forClass(StatusHistory.class);
-        verify(history).save(event.capture());
+        verify(historyAppender).append(event.capture());
         assertEquals(TicketStatus.OPEN, event.getValue().getFromStatus());
         assertEquals(TicketStatus.IN_PROGRESS, event.getValue().getToStatus());
         assertEquals("Starting", event.getValue().getNote());

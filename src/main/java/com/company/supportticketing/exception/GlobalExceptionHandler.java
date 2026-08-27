@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
@@ -27,6 +28,7 @@ import com.company.supportticketing.dto.response.ApiErrorResponse;
 import com.company.supportticketing.dto.response.FieldErrorResponse;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiErrorResponse> validation(MethodArgumentNotValidException ex, HttpServletRequest request) {
@@ -49,6 +51,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     ResponseEntity<ApiErrorResponse> invalidPathValue(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
         return error(HttpStatus.BAD_REQUEST, "Invalid value for " + ex.getName(), request, null);
+    }
+    @ExceptionHandler(InvalidSortPropertyException.class)
+    ResponseEntity<ApiErrorResponse> invalidSort(
+            InvalidSortPropertyException ex,
+            HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, ex.getMessage(), request, null);
     }
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiErrorResponse> unknownRoute(NoResourceFoundException ex, HttpServletRequest request) {
@@ -85,7 +93,18 @@ public class GlobalExceptionHandler {
                 .body(response(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request, null));
     }
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ApiErrorResponse> unexpected(Exception ex, HttpServletRequest request) { return error(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", request, null); }
+    ResponseEntity<ApiErrorResponse> unexpected(Exception ex, HttpServletRequest request) {
+        log.error(
+                "Unhandled exception while processing {} {}",
+                request.getMethod(),
+                request.getRequestURI(),
+                ex);
+        return error(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected error occurred",
+                request,
+                null);
+    }
     private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String message, HttpServletRequest request, List<FieldErrorResponse> fields) {
         return ResponseEntity.status(status).body(response(status, message, request, fields));
     }

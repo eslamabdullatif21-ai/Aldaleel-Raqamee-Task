@@ -1,7 +1,10 @@
 package com.company.supportticketing.service;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.persistence.criteria.Predicate;
@@ -33,11 +36,13 @@ import com.company.supportticketing.dto.request.UpdateStatusRequest;
 import com.company.supportticketing.dto.response.CommentResponse;
 import com.company.supportticketing.dto.response.HistoryResponse;
 import com.company.supportticketing.dto.response.TicketResponse;
+import com.company.supportticketing.exception.InvalidSortPropertyException;
 import com.company.supportticketing.exception.PermissionDeniedException;
 import com.company.supportticketing.exception.TicketNotFoundException;
 import com.company.supportticketing.exception.UserNotFoundException;
 import com.company.supportticketing.mapper.TicketMapper;
 import com.company.supportticketing.repository.CommentRepository;
+import com.company.supportticketing.repository.StatusHistoryAppender;
 import com.company.supportticketing.repository.StatusHistoryRepository;
 import com.company.supportticketing.repository.TicketRepository;
 import com.company.supportticketing.repository.UserRepository;
@@ -47,11 +52,15 @@ import com.company.supportticketing.security.PermissionService;
 @RequiredArgsConstructor
 public class TicketService {
     private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> ALLOWED_TICKET_SORTS = Collections.unmodifiableSet(
+            new LinkedHashSet<>(List.of(
+                    "createdAt", "updatedAt", "status", "priority", "category")));
 
     private final TicketRepository tickets;
     private final UserRepository users;
     private final CommentRepository comments;
     private final StatusHistoryRepository history;
+    private final StatusHistoryAppender historyAppender;
     private final TicketMapper mapper;
     private final TicketStateMachine stateMachine;
     private final PermissionService permissions;
@@ -69,7 +78,7 @@ public class TicketService {
                 .status(TicketStatus.OPEN)
                 .customer(customer)
                 .build());
-        history.save(StatusHistory.builder()
+        historyAppender.append(StatusHistory.builder()
                 .ticket(ticket)
                 .eventType(HistoryEventType.STATUS_CHANGE)
                 .toStatus(TicketStatus.OPEN)
@@ -115,7 +124,7 @@ public class TicketService {
                 ? null
                 : ticket.getAssignedAgent().getId();
         ticket.setAssignedAgent(agent);
-        history.save(StatusHistory.builder()
+        historyAppender.append(StatusHistory.builder()
                 .ticket(ticket)
                 .eventType(HistoryEventType.ASSIGNMENT)
                 .fromAgentId(previous)
@@ -133,7 +142,7 @@ public class TicketService {
         TicketStatus previous = ticket.getStatus();
         stateMachine.validateTransition(previous, request.status());
         ticket.setStatus(request.status());
-        history.save(StatusHistory.builder()
+        historyAppender.append(StatusHistory.builder()
                 .ticket(ticket)
                 .eventType(HistoryEventType.STATUS_CHANGE)
                 .fromStatus(previous)
@@ -219,9 +228,24 @@ public class TicketService {
     }
 
     private Pageable cappedPage(Pageable pageable) {
+        validateTicketSort(pageable.getSort());
         return PageRequest.of(
                 pageable.getPageNumber(),
                 Math.min(pageable.getPageSize(), MAX_PAGE_SIZE),
                 pageable.getSort());
+    }
+
+    private void validateTicketSort(Sort sort) {
+        Set<String> invalidProperties = new LinkedHashSet<>();
+        sort.forEach(order -> {
+            if (!ALLOWED_TICKET_SORTS.contains(order.getProperty())) {
+                invalidProperties.add(order.getProperty());
+            }
+        });
+        if (!invalidProperties.isEmpty()) {
+            throw new InvalidSortPropertyException(
+                    String.join(", ", invalidProperties),
+                    ALLOWED_TICKET_SORTS);
+        }
     }
 }
