@@ -45,11 +45,15 @@ PowerShell uses `$env:VARIABLE_NAME='value'` instead of `export`.
 
 ## Restoring the Database Backup
 
-A PostgreSQL 16.9 schema-and-data dump generated with `pg_dump` is included at `db/backup.sql`. It contains the Flyway schema history and demo data. Its verified SHA-256 is `F0A5FB07EF2A54821FFCBB16DAF7DC31DF7681952FC2E4AB9AD3948D2847E0AE`.
+A PostgreSQL 16.9 schema-and-data dump generated with `pg_dump` is included at `db/backup.sql`. It contains the Flyway schema history and demo data. Its verified SHA-256 is `49C7490576A3F9707D68CEF67CD92DB6D7FBCAE0FA2D8712701F58E1EB4F5BEA`.
 
 ```bash
-docker compose exec -T postgres psql -U app -d support_ticketing < db/backup.sql
+docker compose up -d --wait postgres
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d support_ticketing < db/backup.sql
+docker compose up -d --build app
 ```
+
+When running from PowerShell, use `cmd /c "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d support_ticketing < db\backup.sql"` for the restore command because PowerShell does not support Bash-style input redirection.
 
 Demo accounts included in the dump:
 
