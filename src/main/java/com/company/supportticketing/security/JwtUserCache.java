@@ -1,17 +1,18 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.domain.entity.AppUser;
-import com.company.supportticketing.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Component;
+
+import com.company.supportticketing.domain.entity.AppUser;
+import com.company.supportticketing.repository.UserRepository;
 
 @Component
 public class JwtUserCache {
@@ -22,8 +23,9 @@ public class JwtUserCache {
     private final AtomicLong requestCount = new AtomicLong();
 
     @Autowired
-    public JwtUserCache(UserRepository users,
-                        @Value("${app.jwt.user-cache-ttl:PT1M}") Duration ttl) {
+    public JwtUserCache(
+            UserRepository users,
+            @Value("${app.jwt.user-cache-ttl:PT1M}") Duration ttl) {
         this(users, ttl, System::nanoTime);
     }
 
@@ -47,7 +49,9 @@ public class JwtUserCache {
 
         CacheEntry loaded = entries.compute(key, (ignored, existing) -> {
             long loadTime = nanoTime.getAsLong();
-            if (existing != null && existing.expiresAtNanos() > loadTime) return existing;
+            if (existing != null && existing.expiresAtNanos() > loadTime) {
+                return existing;
+            }
             AppUser user = users.findByEmailIgnoreCase(email)
                     .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
             return new CacheEntry(snapshot(user), loadTime + ttlNanos);
@@ -76,5 +80,5 @@ public class JwtUserCache {
         }
     }
 
-    private record CacheEntry(AppUser user, long expiresAtNanos) { }
+    private record CacheEntry(AppUser user, long expiresAtNanos) {}
 }

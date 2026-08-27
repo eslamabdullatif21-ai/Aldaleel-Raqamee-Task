@@ -1,10 +1,29 @@
 package com.company.supportticketing.domain.entity;
 
-import com.company.supportticketing.domain.enums.*;
-import jakarta.persistence.*;
-import lombok.*;
 import java.time.Instant;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import com.company.supportticketing.domain.enums.HistoryEventType;
+import com.company.supportticketing.domain.enums.TicketStatus;
 
 @Entity
 @Table(name = "status_history", indexes = @Index(name = "idx_history_ticket_changed", columnList = "ticket_id,changed_at"))

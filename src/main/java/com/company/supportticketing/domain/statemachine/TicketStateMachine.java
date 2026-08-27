@@ -1,9 +1,12 @@
 package com.company.supportticketing.domain.statemachine;
 
+import java.util.Map;
+import java.util.Set;
+
+import org.springframework.stereotype.Component;
+
 import com.company.supportticketing.domain.enums.TicketStatus;
 import com.company.supportticketing.exception.InvalidTransitionException;
-import org.springframework.stereotype.Component;
-import java.util.*;
 
 /** Single source of truth for the documented ticket-status transition table. */
 @Component

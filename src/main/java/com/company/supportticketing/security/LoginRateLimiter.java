@@ -1,16 +1,17 @@
 package com.company.supportticketing.security;
 
-import com.company.supportticketing.exception.RateLimitExceededException;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import com.company.supportticketing.exception.RateLimitExceededException;
 
 @Component
 public class LoginRateLimiter {
@@ -30,7 +31,9 @@ public class LoginRateLimiter {
     }
 
     LoginRateLimiter(int maxAttempts, Duration window, LongSupplier currentTimeMillis) {
-        if (maxAttempts < 1) throw new IllegalArgumentException("Login rate limit must allow at least one attempt");
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("Login rate limit must allow at least one attempt");
+        }
         if (window == null || window.isZero() || window.isNegative()) {
             throw new IllegalArgumentException("Login rate-limit window must be positive");
         }
@@ -56,5 +59,5 @@ public class LoginRateLimiter {
         }
     }
 
-    private record AttemptWindow(int attempts, long resetAtMillis) { }
+    private record AttemptWindow(int attempts, long resetAtMillis) {}
 }

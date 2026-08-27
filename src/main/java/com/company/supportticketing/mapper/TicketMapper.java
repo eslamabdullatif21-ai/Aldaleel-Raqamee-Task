@@ -1,8 +1,13 @@
 package com.company.supportticketing.mapper;
 
-import com.company.supportticketing.domain.entity.*;
-import com.company.supportticketing.dto.response.*;
 import org.springframework.stereotype.Component;
+
+import com.company.supportticketing.domain.entity.StatusHistory;
+import com.company.supportticketing.domain.entity.Ticket;
+import com.company.supportticketing.domain.entity.TicketComment;
+import com.company.supportticketing.dto.response.CommentResponse;
+import com.company.supportticketing.dto.response.HistoryResponse;
+import com.company.supportticketing.dto.response.TicketResponse;
 
 @Component
 public class TicketMapper {
