@@ -12,7 +12,7 @@ than the earlier planning documents archived under `not task/`.
 | TASK-005 collision | Both TASK-005 items are implemented and identified as TASK-005 (US-001 validation) and TASK-005 (US-002 assignment). | Preserves traceability despite duplicate numbering in the brief. |
 | Application boundary | One Spring Boot application and one PostgreSQL database. | The stories form one small bounded context. Microservices would introduce networking and distributed consistency without helping a requirement. |
 | Supporting authentication | Registration and login endpoints were added even though they are not named tasks. | Authenticated customer/agent behavior cannot be exercised without identities. This adds only the minimum supporting capability. |
-| Roles | Only `CUSTOMER` and `AGENT`; no administrator role. Public registration is customer-only; the restored backup supplies a demo agent. | No administrator or agent-provisioning workflow was requested. A production deployment would provision agents through an administrator or identity provider. |
+| Roles | Only `CUSTOMER` and `AGENT`; no administrator role. Public registration is customer-only; the restored backup supplies two demo agents. | No administrator or agent-provisioning workflow was requested. A production deployment would provision agents through an administrator or identity provider. |
 | Added operational protections | Pagination, login throttling, JWT principal caching, optimistic locking, and bounded runtime settings are included. | They make the single instance safer without changing the ticketing domain. Their limits and single-instance implications are documented below. |
 
 ## Ticket and Workflow Rules
@@ -64,7 +64,7 @@ than the earlier planning documents archived under `not task/`.
 |---|---|---|
 | Production database | PostgreSQL 16 with Flyway. | SQL is optional in the brief but earns the database bonus and supplies transactions, constraints, and indexing. |
 | Schema authority | `V1__init_schema.sql` creates the schema; Hibernate uses `ddl-auto=validate`. | Startup detects drift rather than silently changing production tables. Schema changes require explicit migrations. |
-| Database backup | `db/backup.sql` is a PostgreSQL 16.9 plain SQL schema-and-data dump. It contains 2 users, 2 tickets, 3 comments, 7 history events, and Flyway history. | Satisfies the SQL backup requirement and gives reviewers demo data. Demo credentials are intentionally non-production. |
+| Database backup | `db/backup.sql` is a PostgreSQL 16.9 plain SQL schema-and-data dump. It contains 3 users (1 customer and 2 agents), 2 tickets, 3 comments, 7 history events, and Flyway history. | Satisfies the SQL backup requirement and lets reviewers exercise multi-agent permissions without public agent registration. Demo credentials are intentionally non-production. |
 | Time handling | Entity timestamps use `Instant`; Hibernate JDBC timezone is UTC. | Avoids server-local timezone ambiguity. Clients receive ISO-8601 instants. |
 | Concurrency | `Ticket.version` uses optimistic locking; a collision returns `409 Conflict` with a retry-safe public message. | Prevents silent lost updates without holding long database locks. Clients must reload or retry after a conflicting update. |
 | Fetching | All `ManyToOne` relations are lazy and Open Session in View is disabled. | Prevents accidental N+1/lazy serialization and long-lived persistence contexts; mappings must occur inside service transactions. |
@@ -86,7 +86,7 @@ than the earlier planning documents archived under `not task/`.
 | Login rate limit | Fixed window, default 10 login attempts per observed remote address per minute; all attempts, including successful ones, count. `429` includes `Retry-After`. | Small, dependency-free single-instance protection. NAT users share a bucket, process restart clears it, and proxy deployments must provide a trusted client-address strategy. |
 | Authorization split | `@PreAuthorize` handles coarse role rules; `PermissionService` handles ticket ownership/assignment. | Avoids database-heavy SpEL and keeps resource policy readable, at the cost of explicit checks in service methods. |
 | CORS | Explicit environment-controlled origins, only GET/POST/PATCH/OPTIONS and Authorization/Content-Type; credentials disabled. | Avoids wildcard credential exposure. New clients/methods require configuration changes. |
-| Public registration | Registration accepts `CUSTOMER` only and rejects `AGENT` with `403 Forbidden`. | Prevents privilege self-escalation. The backup provides the assessment's demo agent; production agent provisioning remains outside scope. |
+| Public registration | Registration accepts `CUSTOMER` only and rejects `AGENT` with `403 Forbidden`. | Prevents privilege self-escalation. The backup provides two assessment demo agents; production agent provisioning remains outside scope. |
 | Missing auth features | No refresh token, logout blacklist, MFA, password reset, account disable flag, or email verification. | None is required by the epic; adding them would expand the identity domain substantially. |
 
 ## Architecture and Code Structure
@@ -132,13 +132,12 @@ than the earlier planning documents archived under `not task/`.
 | Docker build tests | Docker build uses `-DskipTests`; tests are run separately before image creation. | Speeds repeat image builds. CI must preserve the separate test step. |
 | Runtime verification | Docker Engine 29.1.3 and Compose 2.40.3 built and ran the submitted stack in WSL 2. PostgreSQL 16.15 restored the dump, Flyway/Hibernate validated it, the Java 21 application passed all 64 HTTP checks, and the Maven test container passed all 55 tests on Java 21. | Docker Desktop itself was broken on the host, so an isolated Ubuntu WSL Docker Engine was used without deleting existing Docker data. Host Maven tests still use the Java 17 override. |
 
-The latest security-fix verification restored the clean backup with 2 users,
-2 tickets, 3 comments, and 7 history events. All 105 tests passed on Java 17
-and containerized Java 21. Eleven live HTTP checks covered public registration,
-self-claim, forbidden routing and hijacking, permitted handoff, and post-handoff
-access. A second test-only agent was copied from the demo agent inside the
-disposable database; that database, its containers, and its network were removed
-after verification.
+The latest seeded-agent verification restored the clean backup with 3 users
+(1 customer and 2 agents), 2 tickets, 3 comments, and 7 history events. All 105
+unit tests passed, and the complete 64-check live HTTP harness passed against the
+Java 21 Compose application. The harness asserts that public agent registration
+is forbidden, authenticates both restored agents, and exercises self-claim,
+cross-agent denial, status/priority management, and current-owner handoff.
 
 ## Delivery and Operational Decisions
 
