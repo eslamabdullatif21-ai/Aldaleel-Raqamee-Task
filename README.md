@@ -1,6 +1,6 @@
 # Customer Support Ticketing System
 
-A Spring Boot REST API for creating, assigning, and managing support tickets, with ownership-based authorization, enforced status transitions, comments, and an append-only audit history.
+A Spring Boot REST API for creating, discovering, assigning, and managing support tickets, with ownership-based authorization, enforced status transitions, comments, and an append-only audit history.
 
 ## Tech Stack
 
@@ -36,8 +36,9 @@ docker compose up --build --wait
 The API is available at `http://localhost:8080`; health is available at
 `http://localhost:8080/actuator/health`. Compose refuses to start when either
 required secret is missing. PostgreSQL is intentionally available only to the
-internal Compose network. Flyway creates the schema automatically. Docker image
-builds skip tests because the verified test phase is separate.
+internal Compose network. Flyway creates the schema automatically. The image
+build runs the unit suite before packaging, so this standalone Docker workflow
+does not depend on GitHub Actions for verification.
 
 ## Quick Start (local)
 
@@ -96,7 +97,7 @@ The dump contains 3 users (including 2 agents), 2 tickets, 3 comments, and 7 his
 mvn test
 ```
 
-The unit suite has 109 tests. Mockito is configured as a Java agent, so the suite
+The unit suite has 114 tests. Mockito is configured as a Java agent, so the suite
 runs in an ordinary Java 21 Maven container without privileged mode or extra
 Linux capabilities:
 
@@ -113,8 +114,9 @@ docker run --rm -v "${PWD}:/workspace" -w /workspace `
 ```
 
 JaCoCo output is generated at `target/site/jacoco/index.html`. The suite focuses
-on transitions, permissions, service orchestration, pagination, authentication,
-JWT caching, safe errors, allowed sorting, and throttling.
+on transitions, permissions, unassigned discovery, idempotent assignment,
+service orchestration, pagination, authentication, JWT caching, safe errors,
+allowed sorting, and throttling.
 
 PostgreSQL integration tests use Testcontainers and run separately so the unit
 suite remains fast. Docker must be running:
@@ -132,8 +134,9 @@ mvn verify -Pintegration -Dapi.version=1.44
 ```
 
 The integration profile proves that Flyway and Hibernate validate a clean
-PostgreSQL 16 database and that ticket creation, assignment, permissions,
-valid/invalid transitions, and history writes behave atomically on PostgreSQL.
+PostgreSQL 16 database and that ticket creation, unassigned discovery,
+idempotent assignment, permissions, valid/invalid transitions, and history
+writes behave atomically on PostgreSQL.
 
 For the retained aggressive k6 boundary test, start the API and run:
 
@@ -190,8 +193,9 @@ All endpoints except registration, login, and `/actuator/health` require
 | POST | `/api/auth/login` | Receive a JWT |
 | POST | `/api/tickets` | Create a customer ticket |
 | GET | `/api/tickets` | Paginated, role-scoped list with filters and allow-listed sorting |
+| GET | `/api/tickets/unassigned` | Agent-only paginated queue of unassigned tickets |
 | GET | `/api/tickets/{id}` | View an accessible ticket |
-| PATCH | `/api/tickets/{id}/assign` | Self-claim or reassign an owned assignment |
+| PATCH | `/api/tickets/{id}/assign` | Self-claim or reassign; repeated same-agent requests are no-ops |
 | PATCH | `/api/tickets/{id}/status` | Apply a valid status transition |
 | PATCH | `/api/tickets/{id}/priority` | Change priority |
 | POST/GET | `/api/tickets/{id}/comments` | Add/list paginated immutable comments |
@@ -242,13 +246,17 @@ stateDiagram-v2
 | TASK-010 Allowed transitions | `domain/statemachine/TicketStateMachine.java` |
 | TASK-011 Invalid-transition prevention | `TicketStateMachine#validateTransition`, HTTP 409 handler |
 | TASK-012 Status history | `domain/entity/StatusHistory.java`, `StatusHistoryAppender`, `TicketService#history` |
+| Agent discovery enhancement | `TicketController#unassigned`, `TicketService#unassigned` |
 
 ## Assumptions, Decisions, and Tradeoffs
 
-The complete project-wide record is [ASSUMPTIONS-DECISIONS-TRADEOFFS.md](<not task/ASSUMPTIONS-DECISIONS-TRADEOFFS.md>). Key choices are:
+Key choices are:
 
 - Omitted priority defaults to `MEDIUM`; tickets start `OPEN` and unassigned.
-- An agent may self-claim an unassigned ticket; only its current agent may reassign it.
+- Agents can discover unassigned tickets through an agent-only queue. An agent
+  may self-claim one; only its current agent may reassign it.
+- Repeating an assignment to the current agent is an idempotent no-op and does
+  not create misleading history.
 - The customer may close or reopen their own resolved ticket; all other customer status changes are forbidden.
 - Public registration accepts customer accounts only; the backup provides the demo agent.
 - Status, creation, and assignment events form one immutable chronological timeline.
@@ -258,7 +266,7 @@ The complete project-wide record is [ASSUMPTIONS-DECISIONS-TRADEOFFS.md](<not ta
 
 - Database: PostgreSQL with Flyway and `db/backup.sql`.
 - Docker: multi-stage non-root image plus app/database Compose stack.
-- Tests: 109 unit tests, PostgreSQL Testcontainers integration tests, JaCoCo reporting, and GitHub Actions CI.
+- Tests: 114 unit tests, PostgreSQL Testcontainers integration tests, JaCoCo reporting, and GitHub Actions CI.
 
 ## Completion Status
 

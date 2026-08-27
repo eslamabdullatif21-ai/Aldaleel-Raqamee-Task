@@ -27,6 +27,12 @@ public class PermissionService {
         }
     }
 
+    public void assertCanViewUnassignedQueue(AppUser actor) {
+        if (actor.getRole() != UserRole.AGENT) {
+            deny("Only support agents may view unassigned tickets");
+        }
+    }
+
     public void assertCanRouteAssignment(AppUser actor, Ticket ticket, UUID targetAgentId) {
         boolean selfClaim = ticket.getAssignedAgent() == null
                 && Objects.equals(actor.getId(), targetAgentId);

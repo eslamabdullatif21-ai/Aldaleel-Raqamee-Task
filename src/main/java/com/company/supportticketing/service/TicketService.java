@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -106,12 +107,31 @@ public class TicketService {
         return tickets.findAll(spec, cappedPage(pageable)).map(mapper::toResponse);
     }
 
+    @Transactional(readOnly = true)
+    public Page<TicketResponse> unassigned(
+            AppUser actor,
+            TicketStatus status,
+            TicketPriority priority,
+            TicketCategory category,
+            Pageable pageable) {
+        permissions.assertCanViewUnassignedQueue(actor);
+        Specification<Ticket> spec = unassignedTickets()
+                .and(filter(status, priority, category));
+        return tickets.findAll(spec, cappedPage(pageable)).map(mapper::toResponse);
+    }
+
     @Transactional
     public TicketResponse assign(AppUser actor, UUID id, AssignTicketRequest request) {
         permissions.assertCanAssign(actor);
         Ticket ticket = requireTicket(id);
         UUID targetAgentId = request.agentId() == null ? actor.getId() : request.agentId();
         permissions.assertCanRouteAssignment(actor, ticket, targetAgentId);
+        UUID previous = ticket.getAssignedAgent() == null
+                ? null
+                : ticket.getAssignedAgent().getId();
+        if (Objects.equals(previous, targetAgentId)) {
+            return mapper.toResponse(ticket);
+        }
         AppUser agent = request.agentId() == null
                 ? actor
                 : users.findById(request.agentId())
@@ -120,9 +140,6 @@ public class TicketService {
             throw new PermissionDeniedException(
                     "Tickets may only be assigned to support agents");
         }
-        UUID previous = ticket.getAssignedAgent() == null
-                ? null
-                : ticket.getAssignedAgent().getId();
         ticket.setAssignedAgent(agent);
         historyAppender.append(StatusHistory.builder()
                 .ticket(ticket)
@@ -218,6 +235,10 @@ public class TicketService {
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    private Specification<Ticket> unassignedTickets() {
+        return (root, query, cb) -> cb.isNull(root.get("assignedAgent"));
     }
 
     private Pageable chronologicalPage(Pageable pageable, String timestampProperty) {

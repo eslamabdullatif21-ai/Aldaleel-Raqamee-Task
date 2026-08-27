@@ -7,4 +7,6 @@ target/
 .postgres-review.log
 .wsl-task-docker/
 not task/
+not task1/
+not task 1/
 *.pdf

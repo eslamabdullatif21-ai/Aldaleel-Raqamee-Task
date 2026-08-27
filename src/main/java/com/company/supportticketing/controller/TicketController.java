@@ -66,6 +66,18 @@ public class TicketController {
         return service.list(actor, status, priority, category, pageable);
     }
 
+    @GetMapping("/unassigned")
+    @PreAuthorize("hasRole('AGENT')")
+    public Page<TicketResponse> unassigned(
+            @AuthenticationPrincipal AppUser actor,
+            @RequestParam(required = false) TicketStatus status,
+            @RequestParam(required = false) TicketPriority priority,
+            @RequestParam(required = false) TicketCategory category,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+                    Pageable pageable) {
+        return service.unassigned(actor, status, priority, category, pageable);
+    }
+
     @PatchMapping("/{id}/assign")
     @PreAuthorize("hasRole('AGENT')")
     public TicketResponse assign(

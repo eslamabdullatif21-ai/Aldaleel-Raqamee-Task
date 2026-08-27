@@ -89,6 +89,33 @@ class TicketControllerTest {
     }
 
     @Test
+    void unassigned_delegatesToService() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<TicketResponse> page = new PageImpl<>(List.of());
+        when(service.unassigned(
+                agent,
+                TicketStatus.OPEN,
+                TicketPriority.HIGH,
+                TicketCategory.TECHNICAL,
+                pageable)).thenReturn(page);
+
+        Page<TicketResponse> result = controller.unassigned(
+                agent,
+                TicketStatus.OPEN,
+                TicketPriority.HIGH,
+                TicketCategory.TECHNICAL,
+                pageable);
+
+        assertSame(page, result);
+        verify(service).unassigned(
+                agent,
+                TicketStatus.OPEN,
+                TicketPriority.HIGH,
+                TicketCategory.TECHNICAL,
+                pageable);
+    }
+
+    @Test
     void assign_delegatesToService() {
         UUID id = UUID.randomUUID();
         AssignTicketRequest request = new AssignTicketRequest(agent.getId());

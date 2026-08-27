@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -119,6 +120,57 @@ class TicketPersistenceIT {
                         + "AND to_status = 'IN_PROGRESS')",
                 Boolean.class,
                 created.id()));
+    }
+
+    @Test
+    void unassignedQueueIsAgentOnlyAndRepeatedClaimIsIdempotent() {
+        AppUser customer = saveUser("queue-customer-it@example.com", UserRole.CUSTOMER);
+        AppUser agent = saveUser("queue-agent-it@example.com", UserRole.AGENT);
+
+        var available = ticketService.create(
+                customer,
+                new CreateTicketRequest(
+                        "Available ticket",
+                        "Waiting for an agent",
+                        TicketCategory.GENERAL,
+                        null));
+        var alreadyAssigned = ticketService.create(
+                customer,
+                new CreateTicketRequest(
+                        "Assigned ticket",
+                        "Already claimed",
+                        TicketCategory.ACCOUNT,
+                        null));
+        ticketService.assign(agent, alreadyAssigned.id(), new AssignTicketRequest(null));
+
+        var queue = ticketService.unassigned(
+                agent,
+                null,
+                null,
+                null,
+                PageRequest.of(0, 20));
+
+        assertEquals(1, queue.getTotalElements());
+        assertEquals(available.id(), queue.getContent().getFirst().id());
+        assertThrows(
+                PermissionDeniedException.class,
+                () -> ticketService.unassigned(
+                        customer,
+                        null,
+                        null,
+                        null,
+                        PageRequest.of(0, 20)));
+
+        ticketService.assign(agent, available.id(), new AssignTicketRequest(null));
+        ticketService.assign(agent, available.id(), new AssignTicketRequest(null));
+
+        assertEquals(2, historyCount(available.id()));
+        assertEquals(0, ticketService.unassigned(
+                agent,
+                null,
+                null,
+                null,
+                PageRequest.of(0, 20)).getTotalElements());
     }
 
     private AppUser saveUser(String email, UserRole role) {

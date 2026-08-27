@@ -171,6 +171,46 @@ class TicketServiceTest {
     }
 
     @Test
+    void unassigned_returnsFilteredPaginatedResultsForAgent() {
+        Ticket ticket = Ticket.builder()
+                .id(UUID.randomUUID())
+                .customer(customer)
+                .status(TicketStatus.OPEN)
+                .priority(TicketPriority.MEDIUM)
+                .category(TicketCategory.TECHNICAL)
+                .build();
+        when(tickets.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(ticket), PageRequest.of(0, 100), 1));
+
+        Page<TicketResponse> result = service.unassigned(
+                agent,
+                TicketStatus.OPEN,
+                TicketPriority.MEDIUM,
+                TicketCategory.TECHNICAL,
+                PageRequest.of(0, 500));
+
+        assertEquals(1, result.getTotalElements());
+        assertNull(result.getContent().get(0).assignedAgentId());
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(tickets).findAll(any(Specification.class), pageable.capture());
+        assertEquals(100, pageable.getValue().getPageSize());
+    }
+
+    @Test
+    void unassigned_rejectsCustomerBeforeQueryingDatabase() {
+        assertThrows(
+                PermissionDeniedException.class,
+                () -> service.unassigned(
+                        customer,
+                        null,
+                        null,
+                        null,
+                        PageRequest.of(0, 20)));
+
+        verify(tickets, never()).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
     void assign_selfAssigns_whenAgentIdNull() {
         Ticket ticket = Ticket.builder().id(UUID.randomUUID()).customer(customer).status(TicketStatus.OPEN).priority(TicketPriority.MEDIUM).build();
         when(tickets.findById(ticket.getId())).thenReturn(Optional.of(ticket));
@@ -184,6 +224,33 @@ class TicketServiceTest {
         assertEquals(HistoryEventType.ASSIGNMENT, event.getValue().getEventType());
         assertNull(event.getValue().getFromAgentId());
         assertEquals(agent.getId(), event.getValue().getToAgentId());
+    }
+
+    @Test
+    void assign_isIdempotent_whenTicketAlreadyBelongsToActor() {
+        Ticket ticket = Ticket.builder()
+                .id(UUID.randomUUID())
+                .customer(customer)
+                .assignedAgent(agent)
+                .status(TicketStatus.OPEN)
+                .priority(TicketPriority.MEDIUM)
+                .build();
+        when(tickets.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+
+        TicketResponse implicitResult = service.assign(
+                agent,
+                ticket.getId(),
+                new AssignTicketRequest(null));
+        TicketResponse explicitResult = service.assign(
+                agent,
+                ticket.getId(),
+                new AssignTicketRequest(agent.getId()));
+
+        assertEquals(agent.getId(), implicitResult.assignedAgentId());
+        assertEquals(agent.getId(), explicitResult.assignedAgentId());
+        verify(users, never()).findById(any());
+        verify(tickets, never()).save(any());
+        verify(historyAppender, never()).append(any());
     }
 
     @Test
